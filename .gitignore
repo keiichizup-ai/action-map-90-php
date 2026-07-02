@@ -1,0 +1,8 @@
+config/config.php
+.env
+*.zip
+.DS_Store
+uploads/
+node_modules/
+vendor/
+__MACOSX/
