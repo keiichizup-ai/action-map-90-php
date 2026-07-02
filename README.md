@@ -2,7 +2,7 @@
 
 さくらのレンタルサーバで動かすための、PHP + MySQL版AI戦略マンダラチャートです。
 
-## 機能
+## 機能 - メイン画面
 
 - メールアドレス・パスワード登録
 - ログイン / ログアウト
@@ -18,11 +18,22 @@
 - 90日ビジョン画像生成
 - クラウド保存データ削除
 
+## 機能 - 管理画面 (2026/7/3 機能追加)
+
+- ダッシュボード
+  - ユーザー数、チャート数、全タスク、完了タスク、今月の機能利用
+  - 機能別利用回数
+- ユーザー一覧
+  - ユーザー情報、ユーザー毎の機能利用一覧
+- 選択されたユーザーの削除
+
 ## ファイル構成
 
 ```text
 action-map-90-php/
 ├── index.php
+├── admin/
+│   ├─- index.php
 ├── assets/
 │   ├── app.js
 │   └── style.css
@@ -168,3 +179,8 @@ php -S localhost:8000
 ```text
 http://localhost:8000
 ```
+
+## デプロイ先
+- メイン画面 : https://keiichizup.sakura.ne.jp/action-map-90/
+- 管理者画面 : https://keiichizup.sakura.ne.jp/action-map-90/admin/
+
