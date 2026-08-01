@@ -168,3 +168,7 @@ php -S localhost:8000
 ```text
 http://localhost:8000
 ```
+
+## Staging版のデプロイ先
+https://keiichizup.sakura.ne.jp/action-map-90-staging/
+Mobileでのアクセス時は、AIコーチング画面(報告画面)にリダイレクトされる
