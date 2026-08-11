@@ -51,6 +51,35 @@ declare(strict_types=1);
         </div>
       </header>
 
+      <section class="view-switcher" aria-label="画面表示切り替え">
+        <div class="view-switcher-header">
+          <div>
+            <p class="eyebrow">Workspace Tabs</p>
+            <h2>表示する画面を選択</h2>
+            <p>作成した内容を確認・編集する場所です。タブを切り替えてもデータは消えません。</p>
+          </div>
+          <span class="mode-badge mode-badge-tab">表示タブ</span>
+        </div>
+        <nav class="view-tabs" aria-label="表示切り替え">
+          <button class="tab-btn active" type="button" data-tab-target="mandala" aria-controls="tabMandala" aria-selected="true" data-tab-index="1">
+            <span>マンダラチャート</span>
+            <small>9×9の目標マップ</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="execution" aria-controls="tabExecution" aria-selected="false" data-tab-index="2">
+            <span>計画と実行</span>
+            <small>進捗・ロードマップ・タスク</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="resources" aria-controls="tabResources" aria-selected="false" data-tab-index="3">
+            <span>参考動画・書籍</span>
+            <small>学習材料一覧</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="vision" aria-controls="tabVision" aria-selected="false" data-tab-index="4">
+            <span>ビジョン画像</span>
+            <small>90日後のイメージ</small>
+          </button>
+        </nav>
+      </section>
+
       <div class="toolbar">
         <button id="expandActionsBtn" class="btn btn-primary" type="button">アクション展開</button>
         <button id="generatePlanBtn" class="btn btn-accent" type="button">30/60/90日プラン生成</button>
@@ -63,11 +92,13 @@ declare(strict_types=1);
 
       <div class="main-content">
         <div class="workspace-column">
-          <div class="mandala-wrapper">
-            <div id="mandalaChart" class="mandala-chart" aria-label="AI戦略マンダラチャート"></div>
-          </div>
+          <section id="tabMandala" class="tab-panel active" data-tab-panel="mandala" aria-label="マンダラチャート">
+            <div class="mandala-wrapper">
+              <div id="mandalaChart" class="mandala-chart" aria-label="AI戦略マンダラチャート"></div>
+            </div>
+          </section>
 
-          <section class="execution-panel">
+          <section id="tabExecution" class="execution-panel tab-panel" data-tab-panel="execution" aria-label="計画と実行" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Execution</p>
@@ -76,10 +107,30 @@ declare(strict_types=1);
               <button id="clearTasksBtn" class="btn btn-danger" type="button">タスク削除</button>
             </div>
             <div id="taskDashboard" class="task-dashboard hidden" aria-live="polite"></div>
+
+            <section id="ganttSection" class="roadmap-panel hidden" aria-label="90日ロードマップ">
+              <div class="section-header roadmap-header">
+                <div>
+                  <p class="eyebrow">Roadmap</p>
+                  <h3>90日ロードマップ</h3>
+                </div>
+              </div>
+              <div class="roadmap-scroll">
+                <div id="ganttChart" class="roadmap-chart"></div>
+              </div>
+            </section>
+
+            <div class="task-list-header">
+              <h3>タスク一覧</h3>
+              <div class="task-export-actions">
+                <a id="exportCsvLink" class="btn btn-secondary" href="./api/tasks.php?action=csv">CSVダウンロード</a>
+                <a id="exportXlsLink" class="btn btn-secondary" href="./api/tasks.php?action=xls">Excel用xls</a>
+              </div>
+            </div>
             <div id="taskList" class="task-list"></div>
           </section>
 
-          <section class="execution-panel">
+          <section id="tabResources" class="execution-panel tab-panel" data-tab-panel="resources" aria-label="参考動画・書籍" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Resources</p>
@@ -90,7 +141,7 @@ declare(strict_types=1);
             <div id="recommendationList" class="recommendation-list"></div>
           </section>
 
-          <section class="execution-panel">
+          <section id="tabVision" class="execution-panel tab-panel" data-tab-panel="vision" aria-label="ビジョン画像" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Vision Board</p>

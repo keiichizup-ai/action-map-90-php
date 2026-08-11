@@ -17,6 +17,7 @@ const state = {
   jazzTimer: null,
   jazzBar: 0,
   activeAuthAction: "login",
+  activeTab: "mandala",
 };
 
 const LOADING_SCENARIOS = {
@@ -98,6 +99,10 @@ function bindElements() {
     "generatePlanBtn",
     "createTasksBtn",
     "exportIcsLink",
+    "exportCsvLink",
+    "exportXlsLink",
+    "ganttSection",
+    "ganttChart",
     "generateRecommendationsBtn",
     "generateVisionBtn",
     "clearDataBtn",
@@ -115,6 +120,10 @@ function bindElements() {
     "taskList",
     "recommendationList",
     "visionList",
+    "tabMandala",
+    "tabExecution",
+    "tabResources",
+    "tabVision",
   ].forEach((id) => {
     elements[id] = document.getElementById(id);
   });
@@ -146,6 +155,15 @@ function bindEvents() {
       alert("ICSを作成するには、選択したタスクすべてに開始日と終了日を設定してください。");
     }
   });
+
+  [elements.exportCsvLink, elements.exportXlsLink].forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (!state.tasks.length) {
+        event.preventDefault();
+        alert("ダウンロードするタスクがありません。先に実行タスク化を行ってください。");
+      }
+    });
+  });
   elements.generateRecommendationsBtn.addEventListener("click", handleGenerateRecommendations);
   elements.generateVisionBtn.addEventListener("click", handleGenerateVision);
   elements.clearTasksBtn.addEventListener("click", handleClearTasks);
@@ -158,6 +176,28 @@ function bindEvents() {
     scheduleSave();
   });
   elements.jazzToggle.addEventListener("click", toggleJazz);
+
+  document.querySelectorAll("[data-tab-target]").forEach((button) => {
+    button.addEventListener("click", () => switchTab(button.dataset.tabTarget || "mandala"));
+  });
+}
+
+function switchTab(tabName) {
+  const validTabs = ["mandala", "execution", "resources", "vision"];
+  const nextTab = validTabs.includes(tabName) ? tabName : "mandala";
+  state.activeTab = nextTab;
+
+  document.querySelectorAll("[data-tab-panel]").forEach((panel) => {
+    const isActive = panel.dataset.tabPanel === nextTab;
+    panel.hidden = !isActive;
+    panel.classList.toggle("active", isActive);
+  });
+
+  document.querySelectorAll("[data-tab-target]").forEach((button) => {
+    const isActive = button.dataset.tabTarget === nextTab;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
 }
 
 async function refreshStatus() {
@@ -214,6 +254,7 @@ async function loadChart() {
     state.aiResult = result.chart.aiResult || "";
     renderCells();
     renderAiResult(state.aiResult);
+    renderGanttChart();
     setSaveStatus("クラウド保存済み");
   } catch (error) {
     setSaveStatus("読込エラー");
@@ -312,6 +353,10 @@ async function handleAi(mode) {
       renderCells();
     }
     renderAiResult(state.aiResult);
+    renderGanttChart();
+    if (mode === "expand") {
+      switchTab("mandala");
+    }
     await saveChart();
   } catch (error) {
     renderAiResult(`**AI生成エラー**\n${error.message}`);
@@ -344,6 +389,7 @@ async function handleCreateTasks() {
     state.tasks = result.tasks || [];
     state.selectedTaskIds = new Set();
     renderTasks();
+    switchTab("execution");
   } catch (error) {
     elements.taskList.innerHTML = `<p class="empty-message">${escapeHtml(error.message)}</p>`;
   } finally {
@@ -370,6 +416,18 @@ async function handleTaskDate(taskId, startDate, dueDate) {
     taskId,
     startDate,
     dueDate,
+  });
+  state.tasks = result.tasks || [];
+  syncSelectedTaskIds();
+  renderTasks();
+}
+
+async function handleTaskDetails(taskId, updates) {
+  const result = await postJson("./api/tasks.php", {
+    action: "update_details",
+    csrfToken: state.csrfToken,
+    taskId,
+    ...updates,
   });
   state.tasks = result.tasks || [];
   syncSelectedTaskIds();
@@ -411,6 +469,7 @@ async function handleGenerateRecommendations() {
     });
     state.recommendations = result.recommendations || [];
     renderRecommendations();
+    switchTab("resources");
   } catch (error) {
     elements.recommendationList.innerHTML = `<p class="empty-message">${escapeHtml(error.message)}</p>`;
   } finally {
@@ -454,6 +513,7 @@ async function handleGenerateVision() {
     });
     state.visionImages = result.images || [];
     renderVisionImages();
+    switchTab("vision");
   } catch (error) {
     elements.visionList.innerHTML = `<p class="empty-message">${escapeHtml(error.message)}</p>`;
   } finally {
@@ -740,6 +800,7 @@ function renderTasks() {
   if (!state.tasks.length) {
     renderTaskDashboard();
     elements.taskList.innerHTML = `<p class="empty-message">30/60/90日プラン生成後、「実行タスク化」を押すと、ここに今日やることが並びます。</p>`;
+    renderGanttChart();
     updateIcsLink();
     return;
   }
@@ -766,7 +827,10 @@ function renderTasks() {
             <span>${escapeHtml(taskDateRangeLabel(task))}</span>
             <span>${escapeHtml(String(task.estimatedMinutes || 60))}分</span>
           </div>
-          <h3>${escapeHtml(task.title)}</h3>
+          <label class="task-title-edit">
+            <span>タスク名</span>
+            <input type="text" data-task-title="${task.id}" value="${escapeAttribute(task.title || "")}" maxlength="255">
+          </label>
           <p>${escapeHtml(task.description || "")}</p>
         </div>
         <div class="task-controls">
@@ -786,22 +850,61 @@ function renderTasks() {
     `;
   }).join("");
 
+  elements.taskList.querySelectorAll("[data-task-title]").forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+    input.addEventListener("change", () => {
+      const taskId = Number(input.dataset.taskTitle);
+      const currentTask = state.tasks.find((task) => Number(task.id) === taskId);
+      const title = input.value.trim();
+      if (!title) {
+        input.value = currentTask?.title || "";
+        alert("タスク名を入力してください。");
+        return;
+      }
+      handleTaskDetails(taskId, {
+        title,
+        startDate: currentTask?.startDate || "",
+        dueDate: currentTask?.dueDate || "",
+        status: currentTask?.status || "todo",
+      });
+    });
+  });
+
   elements.taskList.querySelectorAll("[data-task-start-date], [data-task-end-date]").forEach((input) => {
     input.addEventListener("change", () => {
       const taskId = Number(input.dataset.taskStartDate || input.dataset.taskEndDate);
       const card = input.closest(".task-card");
       const startInput = card.querySelector("[data-task-start-date]");
       const endInput = card.querySelector("[data-task-end-date]");
+      const statusInput = card.querySelector("[data-task-status]");
+      const titleInput = card.querySelector("[data-task-title]");
       if (startInput.value && endInput.value && endInput.value < startInput.value) {
         endInput.value = startInput.value;
       }
-      handleTaskDate(taskId, startInput.value, endInput.value);
+      handleTaskDetails(taskId, {
+        title: titleInput.value,
+        startDate: startInput.value,
+        dueDate: endInput.value,
+        status: statusInput.value,
+      });
     });
   });
 
   elements.taskList.querySelectorAll("[data-task-status]").forEach((select) => {
     select.addEventListener("change", () => {
-      handleTaskStatus(Number(select.dataset.taskStatus), select.value);
+      const taskId = Number(select.dataset.taskStatus);
+      const card = select.closest(".task-card");
+      handleTaskDetails(taskId, {
+        title: card.querySelector("[data-task-title]").value,
+        startDate: card.querySelector("[data-task-start-date]").value,
+        dueDate: card.querySelector("[data-task-end-date]").value,
+        status: select.value,
+      });
     });
   });
 
@@ -817,7 +920,538 @@ function renderTasks() {
     });
   });
 
+  renderGanttChart();
   updateIcsLink();
+}
+
+function renderGanttChart() {
+  if (!elements.ganttSection || !elements.ganttChart) {
+    return;
+  }
+
+  const rows = buildRoadmapGanttRows(state.aiResult, state.tasks);
+  updateTaskDownloadLinks();
+
+  if (!rows.length) {
+    elements.ganttSection.classList.add("hidden");
+    elements.ganttChart.innerHTML = "";
+    return;
+  }
+
+  elements.ganttSection.classList.remove("hidden");
+
+  const weekHeaders = Array.from({ length: 12 }, (_, index) => {
+    const week = index + 1;
+    return `<span class="roadmap-week-label">W${week}</span>`;
+  }).join("");
+
+  const rowsHtml = rows.map((row) => {
+    const startWeek = clamp(Number(row.startWeek) || 1, 1, 12);
+    const endWeek = clamp(Number(row.endWeek) || startWeek, startWeek, 12);
+    const duration = endWeek - startWeek + 1;
+    const weekCells = Array.from({ length: 12 }, () => `<span class="roadmap-grid-cell"></span>`).join("");
+    const durationLabel = duration > 1 ? `W${startWeek}〜W${endWeek}` : `W${startWeek}`;
+    const title = row.label || roadmapFallback(startWeek);
+    const summary = row.summary && normalizeRoadmapKey(row.summary) !== normalizeRoadmapKey(title)
+      ? `<span class="roadmap-row-summary">${escapeHtml(row.summary)}</span>`
+      : "";
+    const barText = duration > 1 ? `${durationLabel} ${title}` : durationLabel;
+
+    return `
+      <div class="roadmap-gantt-row">
+        <div class="roadmap-row-info">
+          <div class="roadmap-row-meta">
+            <span class="roadmap-row-week">${escapeHtml(durationLabel)}</span>
+            <span class="roadmap-row-phase phase-${row.phase}">${escapeHtml(row.phaseLabel)}</span>
+          </div>
+          <strong>${escapeHtml(title)}</strong>
+          ${summary}
+        </div>
+        <div class="roadmap-track" aria-label="${escapeAttribute(title)} ${durationLabel}">
+          ${weekCells}
+          <span class="roadmap-bar phase-${row.phase}" style="grid-column: ${startWeek} / ${endWeek + 1};" title="${escapeAttribute(`${durationLabel} ${title}`)}">
+            <span>${escapeHtml(barText)}</span>
+          </span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  elements.ganttChart.innerHTML = `
+    <div class="roadmap-gantt-board roadmap-gantt-board-compact" aria-label="90日ロードマップガント">
+      <div class="roadmap-summary-strip">
+        <span class="phase-block phase-early">Day 1-30 / 立ち上げ</span>
+        <span class="phase-block phase-middle">Day 31-60 / 実行・検証</span>
+        <span class="phase-block phase-late">Day 61-90 / 仕上げ</span>
+      </div>
+
+      <div class="roadmap-gantt-table">
+        <div class="roadmap-gantt-header">
+          <div class="roadmap-left-header">週ごとのやること</div>
+          <div class="roadmap-week-header">${weekHeaders}</div>
+        </div>
+        <div class="roadmap-gantt-body">
+          ${rowsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildRoadmapGanttRows(markdown, tasks = []) {
+  const taskRows = buildWeeklyRoadmapRowsFromTasks(tasks);
+  if (taskRows.length) {
+    return taskRows;
+  }
+
+  const hasPlanText = String(markdown || "").trim() !== "";
+  if (!hasPlanText) {
+    return [];
+  }
+
+  const explicitWeeks = extractExplicitWeekItems(markdown);
+  const explicitRows = explicitWeeks
+    .filter((week) => week.items.length > 0)
+    .map((week) => {
+      const item = pickRoadmapAction(week.items, week.week);
+      return {
+        label: makeRoadmapTitle(item, week.week),
+        summary: summarizeRoadmapItems(week.items),
+        startWeek: week.week,
+        endWeek: week.week,
+        phase: roadmapPhaseByWeek(week.week),
+        phaseLabel: roadmapPhaseLabelByWeek(week.week),
+      };
+    })
+    .filter((row) => isUsefulRoadmapAction(row.label));
+
+  if (explicitRows.length >= 4) {
+    return fillMissingWeeklyRows(explicitRows).slice(0, 12);
+  }
+
+  return explicitRows.slice(0, 12);
+}
+
+function buildWeeklyRoadmapRowsFromTasks(tasks = []) {
+  if (!Array.isArray(tasks) || !tasks.length) {
+    return [];
+  }
+
+  const buckets = Array.from({ length: 12 }, () => []);
+  const baseDate = taskStartDate();
+
+  tasks.forEach((task, index) => {
+    const title = roadmapActionFromLine(task.title || task.description || "");
+    if (!isUsefulRoadmapAction(title)) {
+      return;
+    }
+
+    const week = roadmapWeekForTask(task, index, baseDate);
+    buckets[week - 1].push(title);
+  });
+
+  if (!buckets.some((items) => items.length > 0)) {
+    return [];
+  }
+
+  return buckets.map((items, index) => {
+    const week = index + 1;
+    const normalizedItems = normalizeRoadmapItems(items)
+      .filter(isUsefulRoadmapAction)
+      .slice(0, 3);
+    const label = normalizedItems.length
+      ? makeWeeklyRoadmapTitle(normalizedItems, week)
+      : weeklyRoadmapFallback(week);
+    const summary = normalizedItems.length
+      ? normalizedItems.join(" / ")
+      : weeklyRoadmapFallbackSummary(week);
+
+    return {
+      label,
+      summary,
+      startWeek: week,
+      endWeek: week,
+      phase: roadmapPhaseByWeek(week),
+      phaseLabel: roadmapPhaseLabelByWeek(week),
+    };
+  });
+}
+
+function roadmapWeekForTask(task, index, baseDate) {
+  const date = parseLocalDate(String(task.startDate || task.dueDate || ""));
+  if (date) {
+    return clamp(Math.floor(daysBetween(baseDate, date) / 7) + 1, 1, 12);
+  }
+
+  const sourcePhase = String(task.sourcePhase || "");
+  if (sourcePhase.includes("60")) {
+    return clamp(5 + (index % 4), 5, 8);
+  }
+  if (sourcePhase.includes("90")) {
+    return clamp(9 + (index % 4), 9, 12);
+  }
+  return clamp(1 + (index % 4), 1, 4);
+}
+
+function makeWeeklyRoadmapTitle(items, week) {
+  const cleanItems = items
+    .map((item) => simplifyRoadmapTaskTitle(item))
+    .filter(isUsefulRoadmapAction);
+
+  if (!cleanItems.length) {
+    return weeklyRoadmapFallback(week);
+  }
+
+  return truncateRoadmapText(cleanItems[0], 22);
+}
+
+function simplifyRoadmapTaskTitle(value) {
+  return String(value || "")
+    .replace(/^(?:まず|次に|最後に|具体的に|必要に応じて)[、,\s]*/u, "")
+    .replace(/^(?:タスク|作業|施策)\s*\d*[\s:：.)、-]*/u, "")
+    .replace(/すること$/u, "する")
+    .replace(/を行う$/u, "を行う")
+    .trim();
+}
+
+function fillMissingWeeklyRows(rows) {
+  const byWeek = new Map();
+  rows.forEach((row) => {
+    const week = clamp(Number(row.startWeek) || 1, 1, 12);
+    if (!byWeek.has(week) && isUsefulRoadmapAction(row.label)) {
+      byWeek.set(week, { ...row, startWeek: week, endWeek: week });
+    }
+  });
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const week = index + 1;
+    return byWeek.get(week) || {
+      label: weeklyRoadmapFallback(week),
+      summary: weeklyRoadmapFallbackSummary(week),
+      startWeek: week,
+      endWeek: week,
+      phase: roadmapPhaseByWeek(week),
+      phaseLabel: roadmapPhaseLabelByWeek(week),
+    };
+  });
+}
+
+function weeklyRoadmapFallback(week) {
+  const defaults = [
+    "目標と現状を整理",
+    "必要情報を集める",
+    "小さく実行開始",
+    "初回結果を確認",
+    "改善点を反映",
+    "実行量を増やす",
+    "成果行動に集中",
+    "習慣化・仕組み化",
+    "残課題を洗い出す",
+    "仕上げに向け調整",
+    "成果をまとめる",
+    "次の90日に接続",
+  ];
+  return defaults[week - 1] || "実行を進める";
+}
+
+function weeklyRoadmapFallbackSummary(week) {
+  if (week <= 4) {
+    return "立ち上げと初期実行";
+  }
+  if (week <= 8) {
+    return "検証と改善";
+  }
+  return "仕上げと定着";
+}
+
+function isUsefulRoadmapAction(value) {
+  const line = String(value || "").trim();
+  if (isGenericRoadmapLine(line)) {
+    return false;
+  }
+
+  if (/^(?:計画|週次アクション|月次アクション|KPI|注意点|補足|まとめ|優先順位|概要|目的|フェーズ|ロードマップ|実行計画|具体アクション|進捗確認|週次レビュー|タスク一覧)$/u.test(line)) {
+    return false;
+  }
+
+  if (/^(?:\/?(?:30|60|90)\s*日\/?(?:30|60|90)?\s*日?|[0-9０-９]+年後に.*|.*(?:力|スキル)を身につける|.*を築く|.*を達成する)$/u.test(line)) {
+    return false;
+  }
+
+  return line.length >= 4;
+}
+
+function pickRoadmapAction(items, weekNumber) {
+  const normalized = normalizeRoadmapItems(items);
+  return normalized[0] || roadmapFallback(weekNumber);
+}
+
+function normalizeRoadmapKey(value) {
+  return String(value || "")
+    .replace(/[、。,.，．\s]/g, "")
+    .slice(0, 24);
+}
+
+function summarizeRoadmapItems(items) {
+  return normalizeRoadmapItems(items)
+    .slice(0, 2)
+    .join(" / ");
+}
+
+function roadmapPhaseByWeek(week) {
+  if (week <= 4) return "early";
+  if (week <= 8) return "middle";
+  return "late";
+}
+
+function roadmapPhaseLabelByWeek(week) {
+  if (week <= 4) return "30日";
+  if (week <= 8) return "60日";
+  return "90日";
+}
+
+function extractExplicitWeekItems(markdown) {
+  const weeks = Array.from({ length: 12 }, (_, index) => ({
+    week: index + 1,
+    items: [],
+  }));
+
+  const lines = String(markdown || "").split(/\r?\n/);
+  let currentWeeks = [];
+
+  lines.forEach((rawLine) => {
+    const tableAssigned = assignRoadmapTableLine(rawLine, weeks);
+    if (tableAssigned) {
+      currentWeeks = [];
+      return;
+    }
+
+    const line = cleanRoadmapLine(rawLine);
+    if (!line) {
+      return;
+    }
+
+    const weekRange = extractWeekRange(line);
+    if (weekRange) {
+      currentWeeks = rangeNumbers(weekRange.start, weekRange.end);
+      const rest = roadmapActionFromLine(line.slice(weekRange.endIndex));
+      if (rest) {
+        addActionToWeekSet(weeks, currentWeeks, rest);
+      }
+      return;
+    }
+
+    const action = roadmapActionFromLine(line);
+    if (currentWeeks.length && action) {
+      addActionToWeekSet(weeks, currentWeeks, action);
+    }
+  });
+
+  return weeks;
+}
+
+function assignRoadmapTableLine(rawLine, weeks) {
+  if (!String(rawLine || "").includes("|")) {
+    return false;
+  }
+
+  const cells = String(rawLine)
+    .split("|")
+    .map((cell) => cleanRoadmapLine(cell))
+    .filter(Boolean);
+
+  if (cells.length < 2 || cells.every((cell) => /^[-:]+$/.test(cell))) {
+    return false;
+  }
+
+  const weekCell = cells.find((cell) => extractWeekRange(cell));
+  const range = weekCell ? extractWeekRange(weekCell) : null;
+  if (!range) {
+    return false;
+  }
+
+  const actionCell = cells.find((cell) => cell !== weekCell && roadmapActionFromLine(cell));
+  const action = actionCell ? roadmapActionFromLine(actionCell) : "";
+  if (!action) {
+    return false;
+  }
+
+  addActionToWeekSet(weeks, rangeNumbers(range.start, range.end), action);
+  return true;
+}
+
+function extractWeekRange(line) {
+  const patterns = [
+    /(?:Week|W)\s*0?([1-9]|1[0-2])(?:\s*(?:[-〜~–—]|to)\s*(?:Week|W)?\s*0?([1-9]|1[0-2]))?/iu,
+    /(?:第\s*)?([1-9]|1[0-2])\s*週(?:目)?(?:\s*(?:[-〜~–—])\s*(?:第\s*)?([1-9]|1[0-2])\s*週(?:目)?)?/u,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(line);
+    if (match) {
+      const start = Number(match[1]);
+      const end = Number(match[2] || match[1]);
+      if (start >= 1 && start <= 12 && end >= 1 && end <= 12) {
+        return {
+          start: Math.min(start, end),
+          end: Math.max(start, end),
+          endIndex: match.index + match[0].length,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function rangeNumbers(start, end) {
+  const numbers = [];
+  for (let week = start; week <= end; week += 1) {
+    numbers.push(week);
+  }
+  return numbers;
+}
+
+function addActionToWeekSet(weeks, weekNumbers, action) {
+  const cleaned = roadmapActionFromLine(action);
+  if (!cleaned) {
+    return;
+  }
+
+  const targetWeek = weekNumbers
+    .map((weekNumber) => weeks[weekNumber - 1])
+    .filter(Boolean)
+    .sort((a, b) => a.items.length - b.items.length)[0];
+
+  if (targetWeek) {
+    targetWeek.items.push(cleaned);
+  }
+}
+
+function normalizeRoadmapItems(items) {
+  const seen = new Set();
+  return items
+    .map((item) => roadmapActionFromLine(item))
+    .filter(Boolean)
+    .filter((item) => {
+      const normalized = item.replace(/\s+/g, "");
+      if (seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    })
+    .map((item) => truncateRoadmapText(item, 46))
+    .slice(0, 18);
+}
+
+function cleanRoadmapLine(value) {
+  return String(value || "")
+    .replace(/```.*$/g, "")
+    .replace(/^#{1,6}\s*/g, "")
+    .replace(/^[-*・●]\s*/g, "")
+    .replace(/^\[[ x]\]\s*/i, "")
+    .replace(/^\d+[.)．]\s*/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function roadmapActionFromLine(value) {
+  let line = cleanRoadmapLine(value)
+    .replace(/^[\s:：\-–—|｜]+/u, "")
+    .replace(/[。.]$/u, "")
+    .trim();
+
+  if (!line) {
+    return "";
+  }
+
+  line = line
+    .replace(/^(?:Week|W)\s*0?([1-9]|1[0-2])(?:\s*(?:[-〜~–—]|to)\s*(?:Week|W)?\s*0?([1-9]|1[0-2]))?[\s:：.)、\-–—|｜]*/iu, "")
+    .replace(/^(?:第\s*)?([1-9]|1[0-2])\s*週(?:目)?(?:\s*(?:[-〜~–—])\s*(?:第\s*)?([1-9]|1[0-2])\s*週(?:目)?)?[\s:：.)、\-–—|｜]*/u, "")
+    .replace(/^[【\[(（]?(?:30|60|90)\s*日(?:目|間)?(?:プラン|計画|目標|フェーズ)?[】\])）]?[\s:：\-–—|｜]*/u, "")
+    .trim();
+
+  if (isGenericRoadmapLine(line)) {
+    return "";
+  }
+
+  const colonMatch = line.match(/^(.{1,18})[：:]\s*(.+)$/u);
+  if (colonMatch) {
+    const left = colonMatch[1].trim();
+    const right = colonMatch[2].trim();
+    if (isGenericRoadmapLine(left) && !isGenericRoadmapLine(right)) {
+      line = right;
+    } else if (!isGenericRoadmapLine(left) && left.length <= 16) {
+      line = left;
+    } else {
+      line = right || left;
+    }
+  }
+
+  line = line
+    .replace(/^「(.+)」$/u, "$1")
+    .replace(/^[・\-–—\s]+/u, "")
+    .trim();
+
+  if (isGenericRoadmapLine(line)) {
+    return "";
+  }
+
+  return truncateRoadmapText(line, 64);
+}
+
+function isGenericRoadmapLine(line) {
+  const value = String(line || "").trim();
+  if (!value || value.length < 4) {
+    return true;
+  }
+  if (/^(?:[()（）\s]*\/?(?:30|60|90)\s*日(?:\/?(?:30|60|90)\s*日?)*[()）\s]*|30\/60\/90\s*日(?:プラン|計画)?|(?:30|60|90)\s*日(?:プラン|計画|目標|フェーズ)?)(?:[:：])?$/iu.test(value)) {
+    return true;
+  }
+  if (/^(?:計画|週次アクション|月次アクション|KPI|注意点|補足|まとめ|優先順位|概要|目的|目標|フェーズ|戦略|ロードマップ|具体アクション|実行計画|短期|中期|長期|タスク|施策)(?:（.*?）|\(.*?\))?[:：]?$/iu.test(value)) {
+    return true;
+  }
+  if (/^(?:Week|W)\s*([1-9]|1[0-2])(?:\s*[-〜~–—]\s*(?:Week|W)?\s*([1-9]|1[0-2]))?$/iu.test(value)) {
+    return true;
+  }
+  if (/^[-|:：\s]+$/.test(value)) {
+    return true;
+  }
+  return false;
+}
+
+function makeRoadmapTitle(text, weekNumber) {
+  const cleaned = roadmapActionFromLine(text);
+  if (!cleaned) {
+    return roadmapFallback(weekNumber);
+  }
+  return truncateRoadmapText(cleaned, 20);
+}
+
+function truncateRoadmapText(value, maxLength) {
+  const text = String(value || "").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function roadmapFallback(weekNumber) {
+  const defaults = [
+    "目標と前提を整理する",
+    "必要な準備を進める",
+    "小さく実行を始める",
+    "初回の結果を確認する",
+    "改善点を反映する",
+    "実行量を増やす",
+    "成果につながる行動に集中する",
+    "仕組み化・習慣化する",
+    "残課題を洗い出す",
+    "仕上げに向けて調整する",
+    "成果をまとめる",
+    "次の90日に接続する",
+  ];
+  return defaults[weekNumber - 1] || "実行を進める";
 }
 
 function renderTaskDashboard() {
@@ -888,6 +1522,14 @@ function formatDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function daysBetween(startDate, endDate) {
+  return Math.round((startOfDay(endDate) - startOfDay(startDate)) / 86400000);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function progressMessage(percent, expectedPercent, done, total, remainingDays) {
   if (done === total) {
     return "完了です。90日計画が行動に変わりました。";
@@ -953,6 +1595,23 @@ function updateIcsLink() {
   elements.exportIcsLink.textContent = ids.length
     ? `カレンダー用ICS (${ids.length}件${hasMissingDate ? "・日付未設定あり" : ""})`
     : "カレンダー用ICS";
+  updateTaskDownloadLinks();
+}
+
+function updateTaskDownloadLinks() {
+  if (!elements.exportCsvLink || !elements.exportXlsLink) {
+    return;
+  }
+
+  const ids = selectedTaskIds();
+  const suffix = ids.length ? `&ids=${encodeURIComponent(ids.join(","))}` : "";
+  elements.exportCsvLink.href = `./api/tasks.php?action=csv${suffix}`;
+  elements.exportXlsLink.href = `./api/tasks.php?action=xls${suffix}`;
+  elements.exportCsvLink.classList.toggle("disabled-link", !state.tasks.length);
+  elements.exportXlsLink.classList.toggle("disabled-link", !state.tasks.length);
+  const labelCount = ids.length || state.tasks.length;
+  elements.exportCsvLink.textContent = `CSVダウンロード${labelCount ? ` (${labelCount}件)` : ""}`;
+  elements.exportXlsLink.textContent = `Excel用xls${labelCount ? ` (${labelCount}件)` : ""}`;
 }
 
 function renderRecommendations() {
