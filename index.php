@@ -47,6 +47,7 @@ declare(strict_types=1);
         <div class="header-actions">
           <span id="saveStatus" class="save-status">読み込み中</span>
           <span id="userEmail" class="user-email"></span>
+          <a class="btn btn-accent" href="./mobile-coach.php">AI Coachと話す</a>
           <button id="logoutBtn" class="btn btn-secondary" type="button">ログアウト</button>
         </div>
       </header>
