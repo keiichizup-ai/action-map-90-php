@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/config.php';
 
+$timezone = defined('APP_TIMEZONE') ? APP_TIMEZONE : 'Asia/Tokyo';
+date_default_timezone_set($timezone);
+
 ini_set('display_errors', APP_ENV === 'production' ? '0' : '1');
 ini_set('session.use_strict_mode', '1');
 

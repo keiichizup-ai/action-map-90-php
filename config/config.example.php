@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 const APP_NAME = 'ACTION MAP 90';
 const APP_ENV = 'production';
+const APP_TIMEZONE = 'Asia/Tokyo';
 
 const DB_HOST = 'mysql0000.db.sakura.ne.jp';
 const DB_NAME = 'your_database_name';
