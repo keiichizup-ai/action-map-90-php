@@ -47,54 +47,150 @@ declare(strict_types=1);
         <div class="header-actions">
           <span id="saveStatus" class="save-status">読み込み中</span>
           <span id="userEmail" class="user-email"></span>
+          <a class="btn btn-secondary" href="./mobile-coach.php">Mobile Coach</a>
           <button id="logoutBtn" class="btn btn-secondary" type="button">ログアウト</button>
         </div>
       </header>
 
-      <div class="toolbar">
-        <button id="expandActionsBtn" class="btn btn-primary" type="button">アクション展開</button>
-        <button id="generatePlanBtn" class="btn btn-accent" type="button">30/60/90日プラン生成</button>
-        <button id="createTasksBtn" class="btn btn-primary" type="button">実行タスク化</button>
-        <a id="exportIcsLink" class="btn btn-secondary" href="./api/tasks.php?action=ics">カレンダー用ICS</a>
-        <button id="generateRecommendationsBtn" class="btn btn-secondary" type="button">参考動画・書籍</button>
-        <button id="generateVisionBtn" class="btn btn-accent" type="button">90日ビジョン画像</button>
-        <button id="clearDataBtn" class="btn btn-danger" type="button">クラウドデータ削除</button>
-      </div>
+      <section class="view-switcher" aria-label="画面表示切り替え">
+        <div class="view-switcher-header">
+          <div>
+            <p class="eyebrow">Workspace Tabs</p>
+            <h2>表示する画面を選択</h2>
+            <p>作成した内容を確認・編集する場所です。タブを切り替えてもデータは消えません。</p>
+          </div>
+          <span class="mode-badge mode-badge-tab">表示タブ</span>
+        </div>
+        <nav class="view-tabs" aria-label="表示切り替え">
+          <button class="tab-btn active" type="button" data-tab-target="mandala" aria-controls="tabMandala" aria-selected="true" data-tab-index="1">
+            <span>マンダラチャート</span>
+            <small>9×9の目標マップ</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="execution" aria-controls="tabExecution" aria-selected="false" data-tab-index="2">
+            <span>計画と実行</span>
+            <small>進捗・ロードマップ・タスク</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="resources" aria-controls="tabResources" aria-selected="false" data-tab-index="3">
+            <span>参考動画・書籍</span>
+            <small>学習材料一覧</small>
+          </button>
+          <button class="tab-btn" type="button" data-tab-target="vision" aria-controls="tabVision" aria-selected="false" data-tab-index="4">
+            <span>ビジョン画像</span>
+            <small>90日後のイメージ</small>
+          </button>
+        </nav>
+      </section>
+
+      <section class="command-panel" aria-label="AI実行操作">
+        <div class="command-panel-header">
+          <div>
+            <p class="eyebrow">AI Actions</p>
+            <h2>AIで実行する操作</h2>
+            <p>生成・出力・削除など、データを作る/変更する操作です。左から順に進めると使いやすくなります。</p>
+          </div>
+          <span class="mode-badge">実行ボタン</span>
+        </div>
+        <div class="toolbar">
+          <button id="expandActionsBtn" class="btn btn-primary" type="button" data-step="1" data-kind="生成">アクション展開</button>
+          <button id="generatePlanBtn" class="btn btn-accent" type="button" data-step="2" data-kind="生成">30/60/90日プラン生成</button>
+          <button id="createTasksBtn" class="btn btn-primary" type="button" data-step="3" data-kind="生成">実行タスク化</button>
+          <a id="exportIcsLink" class="btn btn-secondary" href="./api/tasks.php?action=ics" data-step="4" data-kind="出力">カレンダー用ICS</a>
+          <button id="generateRecommendationsBtn" class="btn btn-secondary" type="button" data-step="5" data-kind="生成">参考動画・書籍</button>
+          <button id="generateVisionBtn" class="btn btn-accent" type="button" data-step="6" data-kind="生成">90日ビジョン画像</button>
+          <button id="clearDataBtn" class="btn btn-danger" type="button" data-step="!" data-kind="削除">クラウドデータ削除</button>
+        </div>
+      </section>
 
       <div class="main-content">
         <div class="workspace-column">
-          <div class="mandala-wrapper">
-            <div id="mandalaChart" class="mandala-chart" aria-label="AI戦略マンダラチャート"></div>
-          </div>
+          <section id="tabMandala" class="tab-panel active" data-tab-panel="mandala" aria-label="マンダラチャート">
+            <div class="panel-title-row">
+              <div>
+                <p class="eyebrow">Mandala Chart</p>
+                <h2>マンダラチャート</h2>
+                <p class="section-note">中央に大目標、周囲に8つの中目標、外側に具体アクションを整理します。</p>
+              </div>
+            </div>
+            <div class="goal-intelligence-fields" aria-label="目標の背景と期限">
+              <label>
+                <span>WHY（この目標を達成したい理由）</span>
+                <textarea id="goalWhy" rows="3" maxlength="5000" placeholder="この目標が自分にとって大切な理由"></textarea>
+              </label>
+              <label>
+                <span>目標期限</span>
+                <input id="goalDeadline" type="date">
+              </label>
+            </div>
+            <div class="mandala-wrapper">
+              <div id="mandalaChart" class="mandala-chart" aria-label="AI戦略マンダラチャート"></div>
+            </div>
+          </section>
 
-          <section class="execution-panel">
+          <section id="tabExecution" class="execution-panel tab-panel" data-tab-panel="execution" aria-label="計画と実行" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Execution</p>
-                <h2>行動に落とす</h2>
+                <h2>計画と実行</h2>
+                <p class="section-note">タスク進捗、90日ロードマップ、タスク一覧を確認・編集できます。</p>
               </div>
               <button id="clearTasksBtn" class="btn btn-danger" type="button">タスク削除</button>
             </div>
-            <div id="taskDashboard" class="task-dashboard hidden" aria-live="polite"></div>
-            <div id="taskList" class="task-list"></div>
+
+            <section class="execution-subsection">
+              <div class="subsection-title">
+                <p class="eyebrow">Dashboard</p>
+                <h3>タスク進捗ダッシュボード</h3>
+              </div>
+              <div id="taskDashboard" class="task-dashboard hidden" aria-live="polite"></div>
+            </section>
+
+            <section id="ganttSection" class="roadmap-panel hidden" aria-label="90日ロードマップ">
+              <div class="section-header roadmap-header">
+                <div>
+                  <p class="eyebrow">Roadmap</p>
+                  <h3>90日ロードマップ</h3>
+                  <p class="section-note">30/60/90日プランから主要アクションを抽出し、Week1〜Week12の横バーで全体像を表示します。詳細な日付・完了管理はタスク一覧で調整してください。</p>
+                </div>
+              </div>
+              <div class="roadmap-scroll">
+                <div id="ganttChart" class="roadmap-chart"></div>
+              </div>
+            </section>
+
+            <section class="execution-subsection">
+              <div class="subsection-title task-list-header">
+                <div>
+                  <p class="eyebrow">Tasks</p>
+                  <h3>タスク一覧</h3>
+                  <p class="section-note">個別タスクの選択、開始日・終了日、ステータスはこちらで調整します。</p>
+                </div>
+                <div class="task-export-actions">
+                  <a id="exportCsvLink" class="btn btn-secondary" href="./api/tasks.php?action=csv">CSVダウンロード</a>
+                  <a id="exportXlsLink" class="btn btn-secondary" href="./api/tasks.php?action=xls">Excel用xls</a>
+                </div>
+              </div>
+              <div id="taskList" class="task-list"></div>
+            </section>
           </section>
 
-          <section class="execution-panel">
+          <section id="tabResources" class="execution-panel tab-panel" data-tab-panel="resources" aria-label="参考動画・書籍" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Resources</p>
                 <h2>参考動画・書籍</h2>
+                <p class="section-note">選択タスクに関連する動画・書籍一覧です。未選択の場合は全タスクから探します。</p>
               </div>
               <button id="clearRecommendationsBtn" class="btn btn-danger" type="button">参考リンク削除</button>
             </div>
             <div id="recommendationList" class="recommendation-list"></div>
           </section>
 
-          <section class="execution-panel">
+          <section id="tabVision" class="execution-panel tab-panel" data-tab-panel="vision" aria-label="ビジョン画像" hidden>
             <div class="section-header">
               <div>
                 <p class="eyebrow">Vision Board</p>
-                <h2>90日ビジョン画像</h2>
+                <h2>ビジョン画像</h2>
+                <p class="section-note">90日後の達成イメージを視覚化します。</p>
               </div>
               <button id="clearVisionBtn" class="btn btn-danger" type="button">画像削除</button>
             </div>

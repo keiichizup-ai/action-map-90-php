@@ -1,0 +1,11 @@
+DirectoryIndex index.php
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<FilesMatch "\.(sql|md|log|env|ini)$">
+  Require all denied
+</FilesMatch>

@@ -792,6 +792,100 @@ textarea:focus {
   }
 }
 
+
+
+/* Tabbed workspace */
+.view-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.62);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.tab-btn {
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(147, 197, 253, 0.18);
+  border-radius: 16px;
+  color: #dbeafe;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.tab-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(147, 197, 253, 0.5);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.tab-btn.active {
+  color: #ffffff;
+  border-color: rgba(147, 197, 253, 0.78);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.52), rgba(8, 145, 178, 0.30));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 30px rgba(37, 99, 235, 0.22);
+}
+
+.tab-btn span {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.tab-btn small {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.tab-panel {
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  padding: 18px;
+}
+
+.tab-panel[hidden] {
+  display: none !important;
+}
+
+.panel-title-row,
+.subsection-title {
+  margin-bottom: 12px;
+}
+
+.panel-title-row h2,
+.subsection-title h3 {
+  margin: 0;
+}
+
+.execution-subsection {
+  margin-top: 16px;
+}
+
+.execution-subsection:first-of-type {
+  margin-top: 0;
+}
+
+.task-list-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+
 @media (max-width: 1120px) {
   .auth-shell,
   .main-content {
@@ -854,4 +948,1509 @@ textarea:focus {
     grid-template-columns: repeat(3, 210px);
     min-width: 660px;
   }
+}
+
+/* Responsive enhancement v1 / mobile usability */
+.mandala-wrapper {
+  scrollbar-color: rgba(147, 197, 253, 0.45) rgba(255, 255, 255, 0.06);
+  scrollbar-width: thin;
+}
+
+.mandala-wrapper::-webkit-scrollbar {
+  height: 10px;
+}
+
+.mandala-wrapper::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mandala-wrapper::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(147, 197, 253, 0.45);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    width: min(100% - 14px, 1500px);
+    padding-bottom: calc(128px + env(safe-area-inset-bottom));
+  }
+
+  .app-header h1 {
+    font-size: clamp(2.15rem, 11vw, 3rem);
+  }
+
+  .app-header p {
+    font-size: 0.92rem;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .save-status,
+  .user-email,
+  .header-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .toolbar {
+    position: sticky;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 80;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0 14px;
+    padding: 10px;
+    border-radius: 18px;
+    background:
+      linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.88)),
+      rgba(15, 23, 42, 0.94);
+    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(18px);
+  }
+
+  .toolbar .btn {
+    width: 100%;
+    min-height: 46px;
+    padding: 9px 10px;
+    border-radius: 14px;
+    font-size: 0.82rem;
+    line-height: 1.25;
+    white-space: normal;
+    text-align: center;
+  }
+
+  #expandActionsBtn,
+  #generatePlanBtn,
+  #createTasksBtn {
+    font-size: 0.86rem;
+  }
+
+  #clearDataBtn {
+    grid-column: 1 / -1;
+  }
+
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-panel {
+    position: static;
+    order: -1;
+    max-height: none;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .ai-panel-header h2,
+  .section-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .mandala-wrapper {
+    position: relative;
+    padding: 12px 8px 14px;
+    border-radius: 18px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mandala-wrapper::before {
+    content: "横にスクロールして9×9全体を確認できます";
+    display: block;
+    margin: 0 0 9px;
+    padding: 7px 10px;
+    border: 1px solid rgba(147, 197, 253, 0.22);
+    border-radius: 999px;
+    color: #bfdbfe;
+    background: rgba(37, 99, 235, 0.14);
+    font-size: 0.78rem;
+    font-weight: 850;
+    text-align: center;
+  }
+
+  .mandala-chart {
+    grid-template-columns: repeat(3, 230px);
+    min-width: 714px;
+    gap: 5px;
+  }
+
+  .big-block {
+    border-radius: 14px;
+  }
+
+  .cell {
+    min-height: 86px;
+    padding: 25px 8px 8px;
+    font-size: 0.82rem;
+  }
+
+  .execution-panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .section-header .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .task-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .task-card {
+    grid-template-columns: 1fr;
+    gap: 11px;
+    align-items: stretch;
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .task-select {
+    width: 100%;
+    justify-content: flex-start;
+    min-height: 46px;
+    padding-inline: 12px;
+    border-radius: 14px;
+  }
+
+  .task-select input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .task-card h3 {
+    font-size: 1.02rem;
+    line-height: 1.45;
+  }
+
+  .task-card p {
+    font-size: 0.9rem;
+  }
+
+  .task-controls {
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .task-card select {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .task-date input {
+    min-height: 44px;
+  }
+
+  .recommendation-card {
+    grid-template-columns: 1fr;
+    padding: 13px;
+  }
+
+  .recommendation-card img,
+  .recommendation-icon {
+    width: 100%;
+    height: 178px;
+  }
+
+  .vision-list {
+    grid-template-columns: 1fr;
+  }
+
+  .vision-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .vision-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    width: min(100% - 10px, 1500px);
+  }
+
+  .auth-card,
+  .auth-intro,
+  .app-header,
+  .execution-panel,
+  .ai-panel {
+    padding: 14px;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr 1fr;
+    padding: 8px;
+  }
+
+  .toolbar .btn {
+    min-height: 44px;
+    padding: 8px 7px;
+    font-size: 0.78rem;
+  }
+
+  .mandala-chart {
+    grid-template-columns: repeat(3, 218px);
+    min-width: 678px;
+  }
+
+  .cell {
+    min-height: 82px;
+    font-size: 0.78rem;
+  }
+
+  .task-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-card img,
+  .recommendation-icon {
+    height: 154px;
+  }
+
+  .loading-card {
+    padding: 16px;
+  }
+}
+
+
+/* Gantt chart */
+.gantt-panel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.section-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.gantt-header {
+  align-items: flex-start;
+}
+
+.gantt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.gantt-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gantt-chart {
+  min-width: 920px;
+}
+
+.gantt-grid {
+  --task-col: 320px;
+  display: grid;
+  grid-template-columns: var(--task-col) calc(var(--days) * var(--day-width));
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.gantt-side-header,
+.gantt-timeline-header,
+.gantt-task-editor,
+.gantt-timeline-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gantt-side-header,
+.gantt-timeline-header {
+  min-height: 74px;
+  padding: 12px;
+  background: rgba(37, 99, 235, 0.15);
+  color: #dbeafe;
+  font-weight: 900;
+}
+
+.gantt-date-range {
+  margin-bottom: 8px;
+  color: #bfdbfe;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.gantt-days {
+  display: grid;
+  grid-template-columns: repeat(var(--days), var(--day-width));
+  min-width: calc(var(--days) * var(--day-width));
+}
+
+.gantt-day {
+  min-height: 28px;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.gantt-day.label-day {
+  color: #dbeafe;
+  font-weight: 800;
+}
+
+.gantt-task-editor {
+  min-height: 92px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gantt-title-input {
+  min-height: 40px;
+  margin-bottom: 8px;
+  font-weight: 900;
+}
+
+.gantt-inline-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 105px;
+  gap: 7px;
+}
+
+.gantt-inline-controls input,
+.gantt-inline-controls select {
+  min-height: 38px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+}
+
+.gantt-timeline-row {
+  position: relative;
+  min-height: 92px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(255,255,255,0.055) 0,
+      rgba(255,255,255,0.055) 1px,
+      transparent 1px,
+      transparent var(--day-width)
+    );
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 30px;
+  min-width: 12px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  box-shadow: 0 8px 20px rgba(8, 145, 178, 0.24);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.gantt-bar.status-doing {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+
+.gantt-bar.status-done {
+  background: linear-gradient(135deg, #16a34a, #059669);
+}
+
+.task-title-edit {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.task-title-edit span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.task-title-edit input {
+  min-height: 42px;
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.goal-intelligence-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+  gap: 14px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.goal-intelligence-fields label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.goal-intelligence-fields textarea,
+.goal-intelligence-fields input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--cell);
+  color: var(--text);
+  font: inherit;
+}
+
+@media (max-width: 760px) {
+  .goal-intelligence-fields {
+    grid-template-columns: 1fr;
+  }
+  .gantt-panel {
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+
+  .gantt-header {
+    display: grid;
+    gap: 12px;
+  }
+
+  .gantt-actions {
+    justify-content: stretch;
+  }
+
+  .gantt-actions .btn {
+    flex: 1 1 150px;
+  }
+
+  .gantt-scroll::before {
+    content: "← 横にスクロールできます →";
+    display: block;
+    margin: 0 0 8px;
+    color: #bfdbfe;
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .gantt-chart {
+    min-width: 860px;
+  }
+
+  .gantt-grid {
+    --task-col: 285px;
+  }
+
+  .gantt-inline-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gantt-inline-controls select {
+    grid-column: 1 / -1;
+  }
+}
+
+
+@media (max-width: 900px) {
+  .view-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tab-btn {
+    min-height: 58px;
+    text-align: center;
+    align-items: center;
+  }
+
+  .tab-panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 520px) {
+  .view-tabs {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .tab-btn {
+    min-height: 54px;
+    padding: 8px 7px;
+  }
+
+  .tab-btn span {
+    font-size: 0.86rem;
+  }
+
+  .tab-btn small {
+    font-size: 0.68rem;
+  }
+
+  .panel-title-row {
+    margin-bottom: 10px;
+  }
+}
+
+/* Visual separation for action buttons and workspace tabs */
+.command-panel,
+.view-switcher {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(16px);
+}
+
+.command-panel {
+  padding: 14px;
+  border-color: rgba(96, 165, 250, 0.34);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(8, 145, 178, 0.12)),
+    rgba(15, 23, 42, 0.66);
+}
+
+.view-switcher {
+  padding: 12px;
+  border-color: rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.66)),
+    rgba(15, 23, 42, 0.66);
+}
+
+.command-panel-header,
+.view-switcher-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.command-panel-header h2,
+.view-switcher-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.command-panel-header p:last-child,
+.view-switcher-header p:last-child {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.mode-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid rgba(147, 197, 253, 0.38);
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(37, 99, 235, 0.22);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.mode-badge-tab {
+  border-color: rgba(148, 163, 184, 0.34);
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.command-panel .toolbar {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.command-panel .btn {
+  position: relative;
+  min-height: 72px;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 27px 12px 11px;
+  border-radius: 18px;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 26px rgba(0, 0, 0, 0.18);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.command-panel .btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 34px rgba(0, 0, 0, 0.25);
+}
+
+.command-panel .btn::before {
+  content: attr(data-step);
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #0f172a;
+  background: #dbeafe;
+  font-size: 0.76rem;
+  font-weight: 950;
+}
+
+.command-panel .btn::after {
+  content: attr(data-kind);
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(15, 23, 42, 0.28);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.command-panel .btn-danger::before {
+  color: #7f1d1d;
+  background: #fecaca;
+}
+
+.view-switcher .view-tabs {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.view-switcher .tab-btn {
+  position: relative;
+  min-height: 72px;
+  padding: 13px 14px 12px 52px;
+  border-radius: 16px;
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.view-switcher .tab-btn::before {
+  content: attr(data-tab-index);
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: #dbeafe;
+  border: 1px solid rgba(147, 197, 253, 0.36);
+  background: rgba(37, 99, 235, 0.14);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.view-switcher .tab-btn.active::before {
+  color: #0f172a;
+  background: #bfdbfe;
+}
+
+.view-switcher .tab-btn.active {
+  border-color: rgba(191, 219, 254, 0.86);
+}
+
+.view-switcher .tab-btn span::after {
+  content: "を見る";
+  margin-left: 0.2em;
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 0.72em;
+  font-weight: 800;
+}
+
+.view-switcher .tab-btn.active span::after {
+  content: "を表示中";
+  color: #bfdbfe;
+}
+
+@media (max-width: 1180px) {
+  .command-panel .toolbar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .command-panel,
+  .view-switcher {
+    border-radius: 18px;
+  }
+
+  .command-panel-header,
+  .view-switcher-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mode-badge {
+    width: 100%;
+  }
+
+  .command-panel .toolbar {
+    position: sticky;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 80;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .command-panel .btn {
+    min-height: 60px;
+    padding: 25px 10px 9px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+  }
+
+  .view-switcher .view-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view-switcher .tab-btn {
+    min-height: 64px;
+    align-items: flex-start;
+    text-align: left;
+    padding: 11px 10px 11px 44px;
+  }
+
+  .view-switcher .tab-btn::before {
+    top: 12px;
+    left: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .command-panel,
+  .view-switcher {
+    margin: 10px 0;
+    padding: 10px;
+  }
+
+  .command-panel-header h2,
+  .view-switcher-header h2 {
+    font-size: 0.98rem;
+  }
+
+  .command-panel-header p:last-child,
+  .view-switcher-header p:last-child {
+    font-size: 0.78rem;
+  }
+
+  .command-panel .btn {
+    font-size: 0.75rem;
+  }
+
+  .view-switcher .tab-btn span {
+    font-size: 0.82rem;
+  }
+
+  .view-switcher .tab-btn small {
+    font-size: 0.66rem;
+  }
+}
+
+
+/* Compact top area: header / action buttons / workspace tabs */
+.app-header {
+  padding: 12px 18px;
+  border-radius: 18px;
+  gap: 12px;
+}
+
+.app-header .eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+}
+
+.app-header h1 {
+  margin: 2px 0 0;
+  font-size: clamp(1.7rem, 2.6vw, 2.15rem);
+  line-height: 1.05;
+}
+
+.app-header p {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.header-actions {
+  gap: 6px;
+}
+
+.save-status,
+.user-email,
+.header-actions .btn {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+.command-panel,
+.view-switcher {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.20);
+}
+
+.command-panel-header,
+.view-switcher-header {
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.command-panel-header .eyebrow,
+.view-switcher-header .eyebrow {
+  display: none;
+}
+
+.command-panel-header h2,
+.view-switcher-header h2 {
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.command-panel-header p:last-child,
+.view-switcher-header p:last-child {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.mode-badge {
+  min-height: 26px;
+  padding: 4px 9px;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+
+.command-panel .toolbar {
+  gap: 7px;
+}
+
+.command-panel .btn {
+  min-height: 50px;
+  padding: 19px 9px 7px;
+  border-radius: 14px;
+  gap: 2px;
+  font-size: 0.82rem;
+  line-height: 1.18;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.command-panel .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+.command-panel .btn::before {
+  top: 6px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  font-size: 0.68rem;
+}
+
+.command-panel .btn::after {
+  top: 6px;
+  right: 8px;
+  padding: 2px 6px;
+  font-size: 0.56rem;
+}
+
+.view-switcher .view-tabs {
+  gap: 8px;
+}
+
+.view-switcher .tab-btn {
+  min-height: 50px;
+  padding: 8px 10px 8px 40px;
+  border-radius: 14px;
+  gap: 2px;
+}
+
+.view-switcher .tab-btn::before {
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+}
+
+.view-switcher .tab-btn span {
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.view-switcher .tab-btn small {
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.view-switcher .tab-btn span::after {
+  font-size: 0.66em;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    padding: 12px;
+  }
+
+  .command-panel-header,
+  .view-switcher-header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .mode-badge {
+    width: auto;
+  }
+
+  .command-panel .btn {
+    min-height: 54px;
+    padding: 20px 9px 7px;
+  }
+
+  .view-switcher .tab-btn {
+    min-height: 52px;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header,
+  .command-panel,
+  .view-switcher {
+    border-radius: 16px;
+  }
+
+  .app-header h1 {
+    font-size: 1.55rem;
+  }
+
+  .command-panel-header,
+  .view-switcher-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .mode-badge {
+    align-self: flex-start;
+  }
+}
+
+
+/* 90-day roadmap: visual Gantt-style overview */
+.roadmap-panel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.roadmap-header {
+  align-items: flex-start;
+}
+
+.roadmap-scroll {
+  overflow-x: auto;
+  padding-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.roadmap-chart {
+  min-width: 1080px;
+}
+
+.roadmap-gantt-board {
+  display: grid;
+  gap: 10px;
+}
+
+.roadmap-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.phase-block {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.phase-block.phase-early {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.phase-block.phase-middle {
+  background: rgba(8, 145, 178, 0.18);
+  border-color: rgba(34, 211, 238, 0.32);
+}
+
+.phase-block.phase-late {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(167, 139, 250, 0.34);
+}
+
+.roadmap-gantt-table {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.roadmap-gantt-header,
+.roadmap-gantt-row {
+  display: grid;
+  grid-template-columns: 280px minmax(780px, 1fr);
+}
+
+.roadmap-left-header {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 10px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.96);
+  color: #dbeafe;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.roadmap-week-header {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(64px, 1fr));
+  min-height: 46px;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.12) 0 33.333%, rgba(8, 145, 178, 0.12) 33.333% 66.666%, rgba(124, 58, 237, 0.13) 66.666% 100%),
+    rgba(15, 23, 42, 0.88);
+}
+
+.roadmap-week-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  color: #dbeafe;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.roadmap-week-label:nth-child(12) {
+  border-right: 0;
+}
+
+.roadmap-gantt-row {
+  min-height: 64px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.roadmap-row-info {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 10px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.roadmap-row-info strong {
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.32;
+}
+
+.roadmap-row-info p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.roadmap-row-phase {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 20px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #dbeafe;
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+.roadmap-row-phase.phase-early {
+  background: rgba(37, 99, 235, 0.26);
+  border: 1px solid rgba(96, 165, 250, 0.36);
+}
+
+.roadmap-row-phase.phase-middle {
+  background: rgba(8, 145, 178, 0.26);
+  border: 1px solid rgba(34, 211, 238, 0.36);
+}
+
+.roadmap-row-phase.phase-late {
+  background: rgba(124, 58, 237, 0.26);
+  border: 1px solid rgba(167, 139, 250, 0.38);
+}
+
+.roadmap-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(64px, 1fr));
+  align-items: stretch;
+  min-height: 64px;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.045) 0 33.333%, rgba(8, 145, 178, 0.04) 33.333% 66.666%, rgba(124, 58, 237, 0.045) 66.666% 100%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.roadmap-grid-cell {
+  grid-row: 1;
+  min-height: 64px;
+  border-right: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.roadmap-grid-cell:nth-child(12) {
+  border-right: 0;
+}
+
+.roadmap-bar {
+  grid-row: 1;
+  align-self: center;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 30px;
+  margin: 0 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #eff6ff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.roadmap-bar span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roadmap-bar.phase-early {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.96), rgba(59, 130, 246, 0.88));
+}
+
+.roadmap-bar.phase-middle {
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.96), rgba(34, 211, 238, 0.78));
+}
+
+.roadmap-bar.phase-late {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.96), rgba(167, 139, 250, 0.82));
+}
+
+.task-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.task-list-header {
+  align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .roadmap-chart {
+    min-width: 1040px;
+  }
+
+  .roadmap-gantt-header,
+  .roadmap-gantt-row {
+    grid-template-columns: 240px minmax(760px, 1fr);
+  }
+
+  .roadmap-row-info {
+    padding: 10px;
+  }
+
+  .task-list-header {
+    display: grid;
+    gap: 10px;
+  }
+
+  .task-export-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .roadmap-chart {
+    min-width: 980px;
+  }
+
+  .roadmap-summary-strip {
+    grid-template-columns: repeat(3, minmax(210px, 1fr));
+  }
+
+  .roadmap-gantt-header,
+  .roadmap-gantt-row {
+    grid-template-columns: 220px minmax(720px, 1fr);
+  }
+}
+
+
+/* Roadmap Gantt compact week-action view */
+.roadmap-gantt-board-compact {
+  gap: 8px;
+}
+
+.roadmap-gantt-board-compact .roadmap-summary-strip {
+  gap: 6px;
+}
+
+.roadmap-gantt-board-compact .phase-block {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+.roadmap-gantt-board-compact .roadmap-gantt-table {
+  border-radius: 14px;
+}
+
+.roadmap-gantt-board-compact .roadmap-gantt-header,
+.roadmap-gantt-board-compact .roadmap-gantt-row {
+  grid-template-columns: 250px minmax(720px, 1fr);
+}
+
+.roadmap-gantt-board-compact .roadmap-left-header {
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 0.74rem;
+}
+
+.roadmap-gantt-board-compact .roadmap-week-header {
+  grid-template-columns: repeat(12, minmax(52px, 1fr));
+  min-height: 34px;
+}
+
+.roadmap-gantt-board-compact .roadmap-week-label {
+  padding: 6px 2px;
+  font-size: 0.64rem;
+}
+
+.roadmap-gantt-board-compact .roadmap-gantt-row {
+  min-height: 42px;
+}
+
+.roadmap-gantt-board-compact .roadmap-row-info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "meta title"
+    "meta summary";
+  column-gap: 8px;
+  row-gap: 1px;
+  align-content: center;
+  padding: 6px 10px;
+}
+
+.roadmap-row-meta {
+  grid-area: meta;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  justify-items: start;
+}
+
+.roadmap-row-week {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 18px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(219, 234, 254, 0.12);
+  border: 1px solid rgba(191, 219, 254, 0.20);
+  color: #dbeafe;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.roadmap-gantt-board-compact .roadmap-row-phase {
+  min-height: 17px;
+  padding: 1px 7px;
+  font-size: 0.58rem;
+}
+
+.roadmap-gantt-board-compact .roadmap-row-info strong {
+  grid-area: title;
+  align-self: end;
+  font-size: 0.78rem;
+  line-height: 1.18;
+}
+
+.roadmap-row-summary {
+  grid-area: summary;
+  display: block;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roadmap-gantt-board-compact .roadmap-track {
+  grid-template-columns: repeat(12, minmax(52px, 1fr));
+  min-height: 42px;
+}
+
+.roadmap-gantt-board-compact .roadmap-grid-cell {
+  min-height: 42px;
+}
+
+.roadmap-gantt-board-compact .roadmap-bar {
+  min-height: 22px;
+  margin: 0 4px;
+  padding: 3px 8px;
+  font-size: 0.62rem;
+  justify-content: center;
+  box-shadow: 0 6px 13px rgba(0, 0, 0, 0.20);
+}
+
+.roadmap-gantt-board-compact .roadmap-bar span {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .roadmap-gantt-board-compact .roadmap-gantt-header,
+  .roadmap-gantt-board-compact .roadmap-gantt-row {
+    grid-template-columns: 220px minmax(680px, 1fr);
+  }
+
+  .roadmap-gantt-board-compact .roadmap-week-header,
+  .roadmap-gantt-board-compact .roadmap-track {
+    grid-template-columns: repeat(12, minmax(48px, 1fr));
+  }
+
+  .roadmap-gantt-board-compact .roadmap-row-info {
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .roadmap-gantt-board-compact .roadmap-gantt-header,
+  .roadmap-gantt-board-compact .roadmap-gantt-row {
+    grid-template-columns: 205px minmax(640px, 1fr);
+  }
+
+  .roadmap-gantt-board-compact .roadmap-row-info strong {
+    font-size: 0.74rem;
+  }
+
+  .roadmap-row-summary {
+    font-size: 0.6rem;
+  }
+}
+
+/* Weekly roadmap fix: make rows read as concrete weekly actions */
+.roadmap-left-header {
+  font-size: 0.78rem;
+}
+
+.roadmap-gantt-board-compact .roadmap-row-info strong {
+  letter-spacing: -0.01em;
+}
+
+.roadmap-gantt-board-compact .roadmap-bar span {
+  font-size: 0.62rem;
 }

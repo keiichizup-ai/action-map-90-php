@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config/config.php';
 
 ini_set('display_errors', APP_ENV === 'production' ? '0' : '1');
 ini_set('session.use_strict_mode', '1');
+date_default_timezone_set(defined('APP_TIMEZONE') ? APP_TIMEZONE : 'Asia/Tokyo');
 
 set_exception_handler(function (Throwable $error): void {
     if (!headers_sent()) {
