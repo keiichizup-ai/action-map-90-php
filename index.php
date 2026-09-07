@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/asset_version.php';
+
+send_no_store_html_headers();
+$desktopStyleUrl = versioned_asset_url('assets/style.css');
+$desktopScriptUrl = versioned_asset_url('assets/app.js');
 ?>
 <!doctype html>
 <html lang="ja">
@@ -7,8 +13,8 @@ declare(strict_types=1);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ACTION MAP 90</title>
-  <link rel="stylesheet" href="./assets/style.css">
-  <script defer src="./assets/app.js"></script>
+  <link rel="stylesheet" href="<?= html_attribute($desktopStyleUrl) ?>">
+  <script defer src="<?= html_attribute($desktopScriptUrl) ?>"></script>
 </head>
 <body>
   <main class="app-shell">

@@ -476,8 +476,17 @@ async function postMobile(url, payload, includeCsrf = true) {
 
 function registerPwa() {
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+    window.addEventListener('load', async () => {
+      const serviceWorkerUrl = document.documentElement.dataset.serviceWorkerUrl || './service-worker.js';
+      try {
+        const registration = await navigator.serviceWorker.register(serviceWorkerUrl, {
+          scope: './',
+          updateViaCache: 'none'
+        });
+        await registration.update();
+      } catch (_) {
+        // PWA installation is optional; keep the online Mobile Coach usable if registration fails.
+      }
     });
   }
 

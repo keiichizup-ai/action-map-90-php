@@ -1,8 +1,17 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/asset_version.php';
+
+send_no_store_html_headers();
+$manifestUrl = versioned_asset_url('manifest.webmanifest');
+$appleTouchIconUrl = versioned_asset_url('assets/icons/icon-192.svg');
+$mobileStyleUrl = versioned_asset_url('assets/mobile-coach.css');
+$mobileScriptUrl = versioned_asset_url('assets/mobile-coach.js');
+$serviceWorkerUrl = versioned_asset_url('service-worker.js');
 ?>
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-service-worker-url="<?= html_attribute($serviceWorkerUrl) ?>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -11,10 +20,10 @@ declare(strict_types=1);
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="AM90 Coach">
   <title>ACTION MAP 90 AIコーチ</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" href="./assets/icons/icon-192.svg">
-  <link rel="stylesheet" href="./assets/mobile-coach.css">
-  <script defer src="./assets/mobile-coach.js"></script>
+  <link rel="manifest" href="<?= html_attribute($manifestUrl) ?>">
+  <link rel="apple-touch-icon" href="<?= html_attribute($appleTouchIconUrl) ?>">
+  <link rel="stylesheet" href="<?= html_attribute($mobileStyleUrl) ?>">
+  <script defer src="<?= html_attribute($mobileScriptUrl) ?>"></script>
 </head>
 <body>
   <main class="mobile-app">
