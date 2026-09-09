@@ -133,6 +133,11 @@ for ($i = 1; $i <= 3; $i++) {
 for ($i = 4; $i <= 8; $i++) {
     $insertActivity->execute([$i, 2, 201, 'USER_B_SECRET_TASK', 1, "2026-08-2{$i} 10:00:00"]);
 }
+$insertActivity->execute([9, 1, 101, 'USER_A_OLD_TASK', 1, '2026-07-01 10:00:00']);
+for ($i = 10; $i <= 12; $i++) {
+    $day = $i + 14;
+    $insertActivity->execute([$i, 1, 102, 'USER_A_DONE_TASK', 1, "2026-08-{$day} 10:00:00"]);
+}
 
 $builder = new CoachContextBuilder($pdo);
 $now = new DateTimeImmutable('2026-09-02 09:00:00', new DateTimeZone('Asia/Tokyo'));
@@ -144,8 +149,9 @@ $jsonB = json_encode($contextB, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 assertSameValue('USER_A_GOAL', $contextA['goal']['title'], 'User A goal must be loaded.');
 assertSameValue(10, $contextA['goal']['days_remaining'], 'Goal days_remaining must use the supplied date.');
 assertSameValue(2, $contextA['progress']['checkin_streak'], 'Check-in streak must be user-scoped.');
-assertSameValue(3, $contextA['behavior']['postponed_count'], 'Postponement count must be user-scoped.');
+assertSameValue(6, $contextA['behavior']['postponed_count'], 'Postponement count must be user-scoped and exclude events older than 30 days.');
 assertSameValue(101, $contextA['behavior']['repeatedly_postponed_tasks'][0]['task_id'], 'Repeated task must belong to User A.');
+assertSameValue(1, count($contextA['behavior']['repeatedly_postponed_tasks']), 'Completed tasks must not be coaching targets.');
 assertTrueValue(!str_contains($jsonA, 'USER_B_SECRET'), 'User A context leaked User B data.');
 assertTrueValue(!str_contains($jsonB, 'USER_A_'), 'User B context leaked User A data.');
 assertSameValue(null, $builder->findOwnedTask(1, 201), 'User A must not validate User B target_task_id.');
@@ -155,6 +161,64 @@ $decision = buildCoachDecision($contextA);
 assertSameValue(101, $decision['target_task']['id'], 'Rule engine target_task must be sourced from User A context.');
 assertSameValue('REDUCE_FRICTION', $decision['intervention_type'], 'Repeated postponement must take deterministic priority.');
 assertTrueValue(!preg_match('/怠け|意志が弱|ADHD/u', $decision['observation']), 'Observation must not diagnose personality or illness.');
+assertSameValue('START_SMALL', selectCoachQuestionType($contextA), 'Repeated postponement must select START_SMALL first.');
+
+$contextA['coaching'] = [[
+    'response' => ['question_type' => 'START_SMALL'],
+]];
+assertSameValue('OBSTACLE', selectCoachQuestionType($contextA), 'Repeated postponement may use OBSTACLE only to avoid a recent duplicate.');
+
+$whyContext = [
+    'goal' => ['why' => ''],
+    'behavior' => ['signals' => []],
+    'coaching' => [],
+];
+assertSameValue('WHY', selectCoachQuestionType($whyContext), 'A missing WHY must select the WHY question type.');
+assertSameValue(
+    'OBSTACLE',
+    selectCoachQuestionType([
+        'goal' => ['why' => '理由'],
+        'behavior' => ['signals' => ['LOW_COMPLETION']],
+        'coaching' => [],
+    ], ['reason_code' => 'time']),
+    'An explicit low-completion obstacle must select OBSTACLE.'
+);
+assertSameValue(
+    'NEXT_STEP',
+    selectCoachQuestionType([
+        'goal' => ['why' => '理由'],
+        'behavior' => ['signals' => ['LOW_COMPLETION']],
+        'coaching' => [],
+    ]),
+    'Low completion without an explicit obstacle must select NEXT_STEP.'
+);
+assertSameValue(
+    'NEXT_STEP',
+    selectCoachQuestionType([
+        'goal' => ['why' => '理由'],
+        'behavior' => ['signals' => ['POSSIBLE_OVERLOAD', 'LOW_COMPLETION']],
+        'coaching' => [],
+    ]),
+    'Possible overload must take priority over low completion.'
+);
+assertSameValue(
+    'START_SMALL',
+    selectCoachQuestionType([
+        'goal' => ['why' => '理由'],
+        'behavior' => ['signals' => ['POSSIBLE_OVERLOAD', 'LOW_COMPLETION']],
+        'coaching' => [['response' => ['question_type' => 'NEXT_STEP']]],
+    ]),
+    'Possible overload may use START_SMALL to avoid a recent NEXT_STEP duplicate.'
+);
+assertSameValue(
+    'SUCCESS',
+    selectCoachQuestionType([
+        'goal' => ['why' => '理由'],
+        'behavior' => ['signals' => ['GOOD_MOMENTUM']],
+        'coaching' => [],
+    ]),
+    'Good momentum must select SUCCESS.'
+);
 
 assertSameValue(
     ['LOW_COMPLETION', 'POSSIBLE_OVERLOAD'],
@@ -179,7 +243,7 @@ update_owned_task_with_activity(1, 101, [
     'startDate' => '2026-09-02',
     'dueDate' => '2026-09-06',
 ]);
-assertSameValue(4, (int)$pdo->query('SELECT COUNT(*) FROM task_activity_log WHERE user_id = 1 AND is_postponement = 1')->fetchColumn(), 'Owned date update must append a postponement event.');
+assertSameValue(8, (int)$pdo->query('SELECT COUNT(*) FROM task_activity_log WHERE user_id = 1 AND is_postponement = 1')->fetchColumn(), 'Owned date update must append a postponement event without deleting history.');
 
 try {
     update_owned_task_with_activity(1, 201, ['status' => 'done']);
@@ -190,6 +254,6 @@ try {
 assertSameValue('todo', $pdo->query('SELECT status FROM action_tasks WHERE id = 201')->fetchColumn(), 'Cross-user task status must remain unchanged.');
 
 $pdo->exec('DELETE FROM action_tasks WHERE id = 101');
-assertSameValue(4, (int)$pdo->query('SELECT COUNT(*) FROM task_activity_log WHERE user_id = 1 AND task_id IS NULL')->fetchColumn(), 'Activity history must remain after task deletion with task_id set to NULL.');
+assertSameValue(5, (int)$pdo->query('SELECT COUNT(*) FROM task_activity_log WHERE user_id = 1 AND task_id IS NULL')->fetchColumn(), 'Activity history must remain after task deletion with task_id set to NULL.');
 
 echo "PASS coach_context_isolation_test\n";

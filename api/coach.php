@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/task_activity.php';
+require_once __DIR__ . '/coach_context.php';
+require_once __DIR__ . '/coach_response.php';
 
 $data = json_input();
 $userId = current_user_id();
@@ -29,17 +31,29 @@ if ($action === 'save_checkin') {
     $concern = mb_substr(trim((string)($data['concern'] ?? '')), 0, 2000);
     $taskIds = normalize_ids($data['taskIds'] ?? []);
     $taskIds = allowed_today_task_ids($userId, $date, $taskIds);
-    $goal = load_main_goal($userId);
-    $taskTitles = load_task_titles($userId, $taskIds);
-    $aiMessage = coach_message('morning', $goal, $mood, $focusMinutes, $concern, $taskTitles, []);
+    $relevantTasks = load_owned_task_details($userId, $taskIds);
+    $context = buildCoachContext($userId, coach_context_date($date));
+    $aiResponse = generateCoachResponse($userId, 'morning', $context, [
+        'date' => $date,
+        'mood' => $mood,
+        'focus_minutes' => $focusMinutes,
+        'concern' => $concern,
+        'relevant_tasks' => $relevantTasks,
+    ]);
+    $aiMessage = (string)$aiResponse['coach_message'];
+    $aiResponseJson = json_encode($aiResponse, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
     $stmt = db()->prepare(
-        'INSERT INTO daily_checkins (user_id, checkin_date, mood, focus_minutes, concern, selected_task_ids, ai_message)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE mood=VALUES(mood), focus_minutes=VALUES(focus_minutes), concern=VALUES(concern), selected_task_ids=VALUES(selected_task_ids), ai_message=VALUES(ai_message), updated_at=CURRENT_TIMESTAMP'
+        'INSERT INTO daily_checkins (user_id, checkin_date, mood, focus_minutes, concern, selected_task_ids, ai_message, ai_response)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE mood=VALUES(mood), focus_minutes=VALUES(focus_minutes), concern=VALUES(concern), selected_task_ids=VALUES(selected_task_ids), ai_message=VALUES(ai_message), ai_response=VALUES(ai_response), updated_at=CURRENT_TIMESTAMP'
     );
-    $stmt->execute([$userId, $date, $mood, $focusMinutes, $concern, json_encode($taskIds), $aiMessage]);
-    log_usage_event($userId, 'daily_checkin', ['date' => $date, 'taskCount' => count($taskIds)]);
+    $stmt->execute([$userId, $date, $mood, $focusMinutes, $concern, json_encode($taskIds), $aiMessage, $aiResponseJson]);
+    log_usage_event($userId, 'daily_checkin', [
+        'date' => $date,
+        'taskCount' => count($taskIds),
+        'questionType' => $aiResponse['question_type'],
+    ]);
     respond(['ok' => true, 'checkin' => load_checkin($userId, $date)]);
 }
 
@@ -53,29 +67,51 @@ if ($action === 'save_journal') {
     $tomorrowAction = normalize_option((string)($data['tomorrowAction'] ?? ''), ['continue','smaller','reschedule','consult']);
     $completedTaskIds = normalize_ids($data['completedTaskIds'] ?? []);
     $completedTaskIds = allowed_checkin_task_ids($userId, $date, $completedTaskIds);
-    $goal = load_main_goal($userId);
-    $taskTitles = load_task_titles($userId, $completedTaskIds);
-    $recent = load_history($userId, 5);
-    $aiFeedback = coach_message('evening', $goal, $mood, 0, $problemText, $taskTitles, [
-        'completedText' => $completedText,
-        'reasonCode' => $reasonCode,
-        'freeText' => $freeText,
-        'tomorrowAction' => $tomorrowAction,
-        'recent' => $recent,
+    $checkin = load_checkin($userId, $date);
+    $plannedTaskIds = $checkin['taskIds'] ?? [];
+    $relevantTasks = load_owned_task_details($userId, $plannedTaskIds);
+    $plannedCount = count($plannedTaskIds);
+    $completedCount = count($completedTaskIds);
+    $completionRate = $plannedCount > 0 ? (int)round(($completedCount / $plannedCount) * 100) : 0;
+    $reflection = implode(' / ', array_values(array_unique(array_filter(
+        [$completedText, $problemText, $freeText],
+        static fn(string $value): bool => $value !== ''
+    ))));
+    $context = buildCoachContext($userId, coach_context_date($date));
+    $aiResponse = generateCoachResponse($userId, 'evening', $context, [
+        'date' => $date,
+        'mood' => $mood,
+        'problem_text' => $problemText,
+        'reason_code' => $reasonCode,
+        'reflection' => mb_substr($reflection, 0, 500),
+        'tomorrow_action' => $tomorrowAction,
+        'planned_task_ids' => $plannedTaskIds,
+        'completed_task_ids' => $completedTaskIds,
+        'planned_count' => $plannedCount,
+        'completed_count' => $completedCount,
+        'completion_rate' => $completionRate,
+        'relevant_tasks' => $relevantTasks,
     ]);
+    $aiFeedback = (string)$aiResponse['coach_message'];
+    $aiResponseJson = json_encode($aiResponse, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
     $stmt = db()->prepare(
-        'INSERT INTO daily_journals (user_id, journal_date, mood, completed_text, problem_text, reason_code, free_text, tomorrow_action, completed_task_ids, ai_feedback)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE mood=VALUES(mood), completed_text=VALUES(completed_text), problem_text=VALUES(problem_text), reason_code=VALUES(reason_code), free_text=VALUES(free_text), tomorrow_action=VALUES(tomorrow_action), completed_task_ids=VALUES(completed_task_ids), ai_feedback=VALUES(ai_feedback), updated_at=CURRENT_TIMESTAMP'
+        'INSERT INTO daily_journals (user_id, journal_date, mood, completed_text, problem_text, reason_code, free_text, tomorrow_action, completed_task_ids, ai_feedback, ai_response)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE mood=VALUES(mood), completed_text=VALUES(completed_text), problem_text=VALUES(problem_text), reason_code=VALUES(reason_code), free_text=VALUES(free_text), tomorrow_action=VALUES(tomorrow_action), completed_task_ids=VALUES(completed_task_ids), ai_feedback=VALUES(ai_feedback), ai_response=VALUES(ai_response), updated_at=CURRENT_TIMESTAMP'
     );
-    $stmt->execute([$userId, $date, $mood, $completedText, $problemText, $reasonCode, $freeText, $tomorrowAction, json_encode($completedTaskIds), $aiFeedback]);
+    $stmt->execute([$userId, $date, $mood, $completedText, $problemText, $reasonCode, $freeText, $tomorrowAction, json_encode($completedTaskIds), $aiFeedback, $aiResponseJson]);
 
     foreach ($completedTaskIds as $completedTaskId) {
         update_owned_task_with_activity($userId, $completedTaskId, ['status' => 'done']);
     }
 
-    log_usage_event($userId, 'daily_journal', ['date' => $date, 'completedTaskCount' => count($completedTaskIds)]);
+    log_usage_event($userId, 'daily_journal', [
+        'date' => $date,
+        'completedTaskCount' => $completedCount,
+        'plannedTaskCount' => $plannedCount,
+        'questionType' => $aiResponse['question_type'],
+    ]);
     respond(['ok' => true, 'journal' => load_journal($userId, $date), 'history' => load_history($userId)]);
 }
 
@@ -130,58 +166,49 @@ function allowed_checkin_task_ids(int $userId, string $date, array $requestedIds
 
 function load_checkin(int $userId, ?string $date = null): ?array {
     $date ??= (new DateTimeImmutable('today'))->format('Y-m-d');
-    $stmt = db()->prepare('SELECT checkin_date AS date, mood, focus_minutes AS focusMinutes, concern, selected_task_ids AS taskIds, ai_message AS aiMessage FROM daily_checkins WHERE user_id=? AND checkin_date=?');
+    $stmt = db()->prepare('SELECT checkin_date AS date, mood, focus_minutes AS focusMinutes, concern, selected_task_ids AS taskIds, ai_message AS aiMessage, ai_response AS aiResponse FROM daily_checkins WHERE user_id=? AND checkin_date=?');
     $stmt->execute([$userId, $date]);
     $row = $stmt->fetch();
     if (!$row) return null;
-    $row['mood'] = (int)$row['mood']; $row['focusMinutes'] = (int)$row['focusMinutes']; $row['taskIds'] = decode_ids($row['taskIds']);
+    $row['mood'] = (int)$row['mood']; $row['focusMinutes'] = (int)$row['focusMinutes']; $row['taskIds'] = decode_ids($row['taskIds']); $row['aiResponse'] = decode_ai_response($row['aiResponse'] ?? null);
     return $row;
 }
 function load_journal(int $userId, ?string $date = null): ?array {
     $date ??= (new DateTimeImmutable('today'))->format('Y-m-d');
-    $stmt = db()->prepare('SELECT journal_date AS date, mood, completed_text AS completedText, problem_text AS problemText, reason_code AS reasonCode, free_text AS freeText, tomorrow_action AS tomorrowAction, completed_task_ids AS completedTaskIds, ai_feedback AS aiFeedback FROM daily_journals WHERE user_id=? AND journal_date=?');
+    $stmt = db()->prepare('SELECT journal_date AS date, mood, completed_text AS completedText, problem_text AS problemText, reason_code AS reasonCode, free_text AS freeText, tomorrow_action AS tomorrowAction, completed_task_ids AS completedTaskIds, ai_feedback AS aiFeedback, ai_response AS aiResponse FROM daily_journals WHERE user_id=? AND journal_date=?');
     $stmt->execute([$userId, $date]);
     $row = $stmt->fetch();
     if (!$row) return null;
-    $row['mood'] = (int)$row['mood']; $row['completedTaskIds'] = decode_ids($row['completedTaskIds']);
+    $row['mood'] = (int)$row['mood']; $row['completedTaskIds'] = decode_ids($row['completedTaskIds']); $row['aiResponse'] = decode_ai_response($row['aiResponse'] ?? null);
     return $row;
 }
 function load_history(int $userId, int $limit = 14): array {
     $limit = max(1, min(30, $limit));
-    $stmt = db()->prepare("SELECT journal_date AS date, mood, completed_text AS completedText, problem_text AS problemText, ai_feedback AS aiFeedback FROM daily_journals WHERE user_id=? ORDER BY journal_date DESC LIMIT {$limit}");
+    $stmt = db()->prepare("SELECT journal_date AS date, mood, completed_text AS completedText, problem_text AS problemText, ai_feedback AS aiFeedback, ai_response AS aiResponse FROM daily_journals WHERE user_id=? ORDER BY journal_date DESC LIMIT {$limit}");
     $stmt->execute([$userId]);
-    return array_map(function($row){ $row['mood']=(int)$row['mood']; return $row; }, $stmt->fetchAll());
+    return array_map(function($row){ $row['mood']=(int)$row['mood']; $row['aiResponse']=decode_ai_response($row['aiResponse']??null); return $row; }, $stmt->fetchAll());
 }
-function load_main_goal(int $userId): string {
-    $stmt = db()->prepare("SELECT cells FROM mandala_charts WHERE user_id=? AND chart_key='default' LIMIT 1");
-    $stmt->execute([$userId]);
-    $cells = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
-    return trim((string)($cells[40] ?? '未設定'));
+function decode_ai_response(mixed $json): ?array {
+    if (is_array($json)) return $json;
+    $decoded = is_string($json) && $json !== '' ? json_decode($json, true) : null;
+    return is_array($decoded) ? $decoded : null;
 }
-function load_task_titles(int $userId, array $ids): array {
+function coach_context_date(string $date): DateTimeImmutable {
+    return DateTimeImmutable::createFromFormat('!Y-m-d', $date) ?: new DateTimeImmutable('today');
+}
+function load_owned_task_details(int $userId, array $ids): array {
+    $ids = normalize_ids($ids);
     if (!$ids) return [];
     $marks = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare("SELECT title FROM action_tasks WHERE user_id=? AND id IN ($marks)");
+    $stmt = db()->prepare("SELECT id, title, start_date, due_date, priority, status FROM action_tasks WHERE user_id=? AND id IN ($marks)");
     $stmt->execute(array_merge([$userId], $ids));
-    return array_column($stmt->fetchAll(), 'title');
-}
-function coach_message(string $mode, string $goal, int $mood, int $focusMinutes, string $concern, array $tasks, array $extra): string {
-    $taskText = $tasks ? implode('、', $tasks) : '未選択';
-    if ($mode === 'morning') {
-        $prompt = "あなたはACTION MAP 90の専属AIコーチです。日本語で、押し付けず温かく、2〜3文だけ返してください。具体的な最初の一歩を1つ含めます。\n大目標: {$goal}\n気分(1〜5): {$mood}\n集中予定: {$focusMinutes}分\n今日のタスク: {$taskText}\n相談: {$concern}";
-    } else {
-        $prompt = "あなたはACTION MAP 90の専属AIコーチです。日本語で、1)具体的に承認、2)障害を責めずに整理、3)明日の15分以内の一歩、の順で3〜4文だけ返してください。質問で終わらないでください。\n大目標: {$goal}\n気分(1〜5): {$mood}\n完了タスク: {$taskText}\nできたこと: ".($extra['completedText']??'')."\n困ったこと: {$concern}\n未完理由: ".($extra['reasonCode']??'')."\n日記: ".($extra['freeText']??'')."\n明日の方針: ".($extra['tomorrowAction']??'');
+    $byId = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $row['id'] = (int)$row['id'];
+        $byId[$row['id']] = $row;
     }
-    return call_coach_openai($prompt);
-}
-function call_coach_openai(string $prompt): string {
-    if (OPENAI_API_KEY === '' || str_starts_with(OPENAI_API_KEY, 'sk-proj-xxxxxxxx')) return '記録できました。今日は小さな一歩を積み重ねられています。明日は最優先タスクを15分だけ始めましょう。';
-    $payload = ['model'=>OPENAI_MODEL,'input'=>[['role'=>'user','content'=>[['type'=>'input_text','text'=>$prompt]]]],'max_output_tokens'=>350];
-    $ch = curl_init('https://api.openai.com/v1/responses');
-    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.OPENAI_API_KEY,'Content-Type: application/json'],CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),CURLOPT_TIMEOUT=>60]);
-    $body=curl_exec($ch); $status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE); curl_close($ch);
-    if (!$body || $status<200 || $status>=300) return '記録できました。完璧でなくても、振り返ったこと自体が前進です。明日は最初の15分だけ取り組みましょう。';
-    $json=json_decode($body,true); $parts=[];
-    foreach (($json['output']??[]) as $item) foreach (($item['content']??[]) as $content) if (($content['type']??'')==='output_text') $parts[]=$content['text']??'';
-    return trim(implode("\n",$parts)) ?: '記録できました。今日の前進を明日につなげましょう。';
+    return array_values(array_filter(array_map(
+        static fn(int $id): ?array => $byId[$id] ?? null,
+        $ids
+    )));
 }

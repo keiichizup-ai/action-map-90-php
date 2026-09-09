@@ -15,7 +15,10 @@ const COACH_BEHAVIOR_THRESHOLDS = [
     'low_completion_rate' => 40,
     'good_momentum_rate' => 80,
     'possible_overload_target_count' => 8,
+    'postponement_lookback_days' => 30,
 ];
+
+const COACH_QUESTION_TYPES = ['WHY', 'OBSTACLE', 'NEXT_STEP', 'START_SMALL', 'SUCCESS'];
 
 function buildCoachContext(int $userId, ?DateTimeImmutable $now = null): array
 {
@@ -52,13 +55,17 @@ final class CoachContextBuilder
         $today = $now->setTime(0, 0);
         $todayString = $today->format('Y-m-d');
         $windowStart = $today->modify('-6 days')->format('Y-m-d');
+        $behaviorWindowStart = $today
+            ->modify('-' . (COACH_BEHAVIOR_THRESHOLDS['postponement_lookback_days'] - 1) . ' days')
+            ->format('Y-m-d');
+        $behaviorWindowEnd = $today->modify('+1 day')->format('Y-m-d');
 
         $goal = $this->loadGoal($userId, $today);
         $todayTasks = $this->loadTodayTasks($userId, $todayString);
         $incompleteTasks = $this->loadIncompleteTasks($userId);
         $progress = $this->loadProgress($userId, $windowStart, $todayString);
-        $repeatedTasks = $this->loadRepeatedlyPostponedTasks($userId);
-        $postponedCount = $this->loadPostponedCount($userId);
+        $repeatedTasks = $this->loadRepeatedlyPostponedTasks($userId, $behaviorWindowStart, $behaviorWindowEnd);
+        $postponedCount = $this->loadPostponedCount($userId, $behaviorWindowStart, $behaviorWindowEnd);
         $signals = buildCoachBehaviorSignals($progress, $repeatedTasks);
 
         return [
@@ -70,12 +77,14 @@ final class CoachContextBuilder
             ],
             'progress' => $progress,
             'behavior' => [
+                'window_start' => $behaviorWindowStart,
+                'window_end' => $todayString,
                 'postponed_count' => $postponedCount,
                 'repeatedly_postponed_tasks' => $repeatedTasks,
                 'signals' => $signals,
             ],
-            'reflection' => $this->loadRecentJournals($userId),
-            'coaching' => $this->loadRecentCoachResponses($userId),
+            'reflection' => $this->loadRecentJournals($userId, $todayString),
+            'coaching' => $this->loadRecentCoachResponses($userId, $todayString),
         ];
     }
 
@@ -213,18 +222,25 @@ final class CoachContextBuilder
         return $streak;
     }
 
-    private function loadPostponedCount(int $userId): int
+    private function loadPostponedCount(int $userId, string $windowStart, string $windowEnd): int
     {
         $stmt = $this->pdo->prepare(
             'SELECT COUNT(*)
              FROM task_activity_log
-             WHERE user_id = ? AND is_postponement = 1'
+             WHERE user_id = ?
+               AND is_postponement = 1
+               AND created_at >= ?
+               AND created_at < ?'
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$userId, $windowStart, $windowEnd]);
         return (int)$stmt->fetchColumn();
     }
 
-    private function loadRepeatedlyPostponedTasks(int $userId): array
+    private function loadRepeatedlyPostponedTasks(
+        int $userId,
+        string $windowStart,
+        string $windowEnd
+    ): array
     {
         $threshold = COACH_BEHAVIOR_THRESHOLDS['repeated_postponement_count'];
         $stmt = $this->pdo->prepare(
@@ -236,12 +252,15 @@ final class CoachContextBuilder
              WHERE activity.user_id = ?
                AND activity.task_id IS NOT NULL
                AND activity.is_postponement = 1
+               AND activity.created_at >= ?
+               AND activity.created_at < ?
+               AND task.status <> 'done'
              GROUP BY activity.task_id
              HAVING COUNT(*) >= {$threshold}
              ORDER BY postponement_count DESC, activity.task_id
              LIMIT 10"
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$userId, $windowStart, $windowEnd]);
 
         return array_map(static fn(array $row): array => [
             'task_id' => (int)$row['task_id'],
@@ -250,16 +269,16 @@ final class CoachContextBuilder
         ], $stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
-    private function loadRecentJournals(int $userId): array
+    private function loadRecentJournals(int $userId, string $throughDate): array
     {
         $stmt = $this->pdo->prepare(
             'SELECT journal_date, mood, completed_text, problem_text, reason_code, free_text, tomorrow_action
              FROM daily_journals
-             WHERE user_id = ?
+             WHERE user_id = ? AND journal_date <= ?
              ORDER BY journal_date DESC, id DESC
              LIMIT 3'
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$userId, $throughDate]);
 
         return array_map(static fn(array $row): array => [
             'date' => (string)$row['journal_date'],
@@ -272,7 +291,7 @@ final class CoachContextBuilder
         ], $stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
-    private function loadRecentCoachResponses(int $userId): array
+    private function loadRecentCoachResponses(int $userId, string $throughDate): array
     {
         $stmt = $this->pdo->prepare(
             "SELECT response_date, coach_type, ai_response, legacy_message
@@ -280,17 +299,19 @@ final class CoachContextBuilder
                SELECT checkin_date AS response_date, 'morning' AS coach_type,
                       ai_response, ai_message AS legacy_message, created_at
                FROM daily_checkins
-               WHERE user_id = ? AND (ai_response IS NOT NULL OR COALESCE(ai_message, '') <> '')
+               WHERE user_id = ? AND checkin_date <= ?
+                 AND (ai_response IS NOT NULL OR COALESCE(ai_message, '') <> '')
                UNION ALL
                SELECT journal_date AS response_date, 'evening' AS coach_type,
                       ai_response, ai_feedback AS legacy_message, created_at
                FROM daily_journals
-               WHERE user_id = ? AND (ai_response IS NOT NULL OR COALESCE(ai_feedback, '') <> '')
+               WHERE user_id = ? AND journal_date <= ?
+                 AND (ai_response IS NOT NULL OR COALESCE(ai_feedback, '') <> '')
              ) responses
              ORDER BY response_date DESC, created_at DESC
              LIMIT 3"
         );
-        $stmt->execute([$userId, $userId]);
+        $stmt->execute([$userId, $throughDate, $userId, $throughDate]);
 
         return array_map(static function (array $row): array {
             $structured = json_decode((string)($row['ai_response'] ?? ''), true);
@@ -428,4 +449,67 @@ function coachRecommendedAction(?array $targetTask, string $fallback): string
     }
 
     return sprintf('「%s」を15分だけ始める。', (string)$targetTask['title']);
+}
+
+function selectCoachQuestionType(array $context, array $currentInput = []): string
+{
+    $signals = is_array($context['behavior']['signals'] ?? null)
+        ? $context['behavior']['signals']
+        : [];
+    $recentTypes = recentCoachQuestionTypes($context, 3);
+    $hasExplicitConcern = trim((string)($currentInput['concern'] ?? '')) !== ''
+        || trim((string)($currentInput['problem_text'] ?? '')) !== ''
+        || !in_array(trim((string)($currentInput['reason_code'] ?? '')), ['', 'none'], true);
+
+    if (in_array('REPEATED_POSTPONEMENT', $signals, true)) {
+        return firstNonRecentQuestionType(['START_SMALL', 'OBSTACLE'], $recentTypes);
+    }
+
+    if (in_array('POSSIBLE_OVERLOAD', $signals, true)) {
+        return firstNonRecentQuestionType(['NEXT_STEP', 'START_SMALL'], $recentTypes);
+    }
+
+    if (in_array('LOW_COMPLETION', $signals, true)) {
+        $candidates = $hasExplicitConcern
+            ? ['OBSTACLE', 'NEXT_STEP']
+            : ['NEXT_STEP'];
+        return firstNonRecentQuestionType($candidates, $recentTypes);
+    }
+
+    if (in_array('GOOD_MOMENTUM', $signals, true)) {
+        return 'SUCCESS';
+    }
+
+    if (trim((string)($context['goal']['why'] ?? '')) === '') {
+        return 'WHY';
+    }
+
+    return 'NEXT_STEP';
+}
+
+function recentCoachQuestionTypes(array $context, int $limit = 3): array
+{
+    $types = [];
+    foreach (($context['coaching'] ?? []) as $entry) {
+        $type = (string)($entry['response']['question_type'] ?? '');
+        if (in_array($type, COACH_QUESTION_TYPES, true)) {
+            $types[] = $type;
+        }
+        if (count($types) >= max(1, $limit)) {
+            break;
+        }
+    }
+    return $types;
+}
+
+function firstNonRecentQuestionType(array $candidates, array $recentTypes): string
+{
+    foreach ($candidates as $candidate) {
+        if (in_array($candidate, COACH_QUESTION_TYPES, true) && !in_array($candidate, $recentTypes, true)) {
+            return $candidate;
+        }
+    }
+
+    $fallback = (string)($candidates[0] ?? 'NEXT_STEP');
+    return in_array($fallback, COACH_QUESTION_TYPES, true) ? $fallback : 'NEXT_STEP';
 }
