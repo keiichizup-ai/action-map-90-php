@@ -9,6 +9,24 @@ $appleTouchIconUrl = versioned_asset_url('assets/icons/icon-192.svg');
 $mobileStyleUrl = versioned_asset_url('assets/mobile-coach.css');
 $mobileScriptUrl = versioned_asset_url('assets/mobile-coach.js');
 $serviceWorkerUrl = versioned_asset_url('service-worker.js');
+// Pure environment guard. A Host header or query flag alone cannot enable staging.
+function dummy_avatar_enabled(array $server, string $sapi, string $directory): bool
+{
+    $script = $server['SCRIPT_NAME'] ?? '';
+    if (str_starts_with($script, '/action-map-90/')
+        || str_contains(rtrim($directory, '/') . '/', '/action-map-90/')) {
+        return false;
+    }
+    $host = parse_url('http://' . ($server['HTTP_HOST'] ?? ''), PHP_URL_HOST);
+    $local = $sapi === 'cli-server'
+        && in_array($server['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
+        && in_array($host, ['localhost', '127.0.0.1', '[::1]'], true);
+    $staging = ($server['HTTP_HOST'] ?? '') === 'keiichizup.sakura.ne.jp'
+        && $script === '/action-map-90-staging/mobile-coach.php'
+        && $directory === '/home/keiichizup/www/action-map-90-staging';
+    return $local || $staging;
+}
+$dummyAvatarEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
 ?>
 <!doctype html>
 <html lang="ja" data-service-worker-url="<?= html_attribute($serviceWorkerUrl) ?>">
@@ -24,6 +42,10 @@ $serviceWorkerUrl = versioned_asset_url('service-worker.js');
   <link rel="apple-touch-icon" href="<?= html_attribute($appleTouchIconUrl) ?>">
   <link rel="stylesheet" href="<?= html_attribute($mobileStyleUrl) ?>">
   <script defer src="<?= html_attribute($mobileScriptUrl) ?>"></script>
+<?php if ($dummyAvatarEnabled): ?>
+  <link rel="stylesheet" href="<?= html_attribute(versioned_asset_url('assets/avatar/dummy-avatar.css')) ?>">
+  <script type="module" src="<?= html_attribute(versioned_asset_url('assets/avatar/mobile-avatar-bridge.js')) ?>"></script>
+<?php endif; ?>
 </head>
 <body>
   <main class="mobile-app">
@@ -57,6 +79,12 @@ $serviceWorkerUrl = versioned_asset_url('service-worker.js');
         <a class="menu-item" href="./?view=desktop">PC版を開く</a>
         <button id="mobileLogoutBtn" type="button" class="menu-item danger">ログアウト</button>
       </div>
+
+<?php if ($dummyAvatarEnabled): ?>
+      <div id="mobileDummyAvatar" class="dummy-avatar-host" hidden
+           data-avatar-bridge-url="<?= html_attribute(versioned_asset_url('assets/avatar/avatar-bridge.js')) ?>"
+           data-avatar-controller-url="<?= html_attribute(versioned_asset_url('assets/avatar/dummy-avatar-controller.js')) ?>"></div>
+<?php endif; ?>
 
       <section id="homeScreen" class="mobile-screen">
         <div class="home-hero">

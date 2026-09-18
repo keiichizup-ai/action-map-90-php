@@ -147,6 +147,7 @@ function renderMobileData() {
   fillSavedValues();
   renderHistory();
   renderHome();
+  notifyMobileAvatar('restore');
 }
 
 function renderHome() {
@@ -292,6 +293,7 @@ async function saveMobileCheckin(event) {
   event.preventDefault();
   const button = $('checkinSubmitBtn');
   setButtonBusy(button, true, 'AIコーチが考えています…');
+  notifyMobileAvatar('thinking');
 
   try {
     const result = await postMobile('./api/coach.php', {
@@ -307,9 +309,11 @@ async function saveMobileCheckin(event) {
     mobileState.checkin = result.checkin;
     renderMobileData();
     showResponse('mobileCheckinMessage', result.checkin.aiMessage);
+    notifyMobileAvatar('response', result.checkin.aiResponse, 'morning');
     toast('今日のチェックインを保存しました');
   } catch (error) {
     showResponse('mobileCheckinMessage', error.message);
+    notifyMobileAvatar('idle');
   } finally {
     setButtonBusy(button, false);
   }
@@ -319,6 +323,7 @@ async function saveMobileJournal(event) {
   event.preventDefault();
   const button = $('journalSubmitBtn');
   setButtonBusy(button, true, 'AIコーチが振り返っています…');
+  notifyMobileAvatar('thinking');
   const text = $('mobileJournalText').value.trim();
 
   try {
@@ -340,9 +345,11 @@ async function saveMobileJournal(event) {
     await loadMobileTasks();
     renderMobileData();
     showResponse('mobileJournalMessage', result.journal.aiFeedback);
+    notifyMobileAvatar('response', result.journal.aiResponse, 'evening');
     toast('今日の振り返りを保存しました');
   } catch (error) {
     showResponse('mobileJournalMessage', error.message);
+    notifyMobileAvatar('idle');
   } finally {
     setButtonBusy(button, false);
   }
@@ -378,16 +385,43 @@ function switchMobileScreen(name, scroll = true) {
   });
 
   if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+  notifyMobileAvatar('screen');
 }
 
 function showMobileAuth() {
   $('mobileAuth').classList.remove('hidden');
   $('mobileAppView').classList.add('hidden');
+  notifyMobileAvatar('disable');
 }
 
 function showMobileApp() {
   $('mobileAuth').classList.add('hidden');
   $('mobileAppView').classList.remove('hidden');
+  notifyMobileAvatar('enable');
+}
+
+// Optional, one-way notifications. Never send text, identity, tasks or API payloads.
+function notifyMobileAvatar(type, response, coachType = '') {
+  if (!$('mobileDummyAvatar')) return;
+  try {
+    const screen = mobileState.currentScreen;
+    const saved = screen === 'morning' ? mobileState.checkin
+      : screen === 'evening' ? mobileState.journal
+      : screen === 'home' ? mobileState.journal || mobileState.checkin : null;
+    const source = response === undefined ? saved?.aiResponse : response;
+    const questionTypes = ['WHY', 'OBSTACLE', 'NEXT_STEP', 'START_SMALL', 'SUCCESS'];
+    const signals = ['GOOD_MOMENTUM', 'REPEATED_POSTPONEMENT', 'LOW_COMPLETION', 'POSSIBLE_OVERLOAD'];
+    const metadata = {
+      question_type: questionTypes.includes(source?.question_type) ? source.question_type : null,
+      behavior_signals: Array.isArray(source?.behavior_signals)
+        ? [...new Set(source.behavior_signals.filter(value => signals.includes(value)))].slice(0, 4) : [],
+      intervention_type: ['REDUCE_FRICTION', 'NARROW_FOCUS', 'REPLAN', 'REINFORCE', 'START_NEXT'].includes(source?.intervention_type)
+        ? source.intervention_type : null
+    };
+    document.dispatchEvent(new CustomEvent('mobile-coach-avatar', {
+      detail: { type, response: metadata, animate: type === 'response' && (screen === 'home' || screen === coachType) }
+    }));
+  } catch (_) { /* Avatar must never affect save/load/text rendering. */ }
 }
 
 function selectedValue(name, fallback) {
