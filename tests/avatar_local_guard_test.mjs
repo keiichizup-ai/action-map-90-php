@@ -11,12 +11,12 @@ test('normal PHP SAPI never enables Dummy even with loopback or query flag', () 
     const code = `$_SERVER['HTTP_HOST']=${JSON.stringify(host)}; $_SERVER['REMOTE_ADDR']='127.0.0.1'; $_GET['avatar']='1'; require ${JSON.stringify(path.join(root, 'mobile-coach.php'))};`;
     const html = execFileSync(php, ['-r', code], { encoding: 'utf8' });
     assert.ok(html.includes('homeCoachMessage'));
-    assert.equal(html.includes('mobileDummyAvatar'), false);
+    assert.equal(html.includes('mobileMiraPresentation'), false);
     assert.equal(html.includes('assets/avatar/'), false);
   }
 });
-test('Dummy runtime has no SDK, release, model or external dependency', () => {
-  for (const name of ['avatar-bridge.js', 'dummy-avatar-controller.js', 'mobile-avatar-bridge.js', 'dummy-avatar.css']) {
+test('Presentation runtime has no SDK, release, model or external dependency', () => {
+  for (const name of ['avatar-bridge.js', 'mira-presentation-controller.js', 'mobile-avatar-bridge.js', 'mira-presentation.css']) {
     const source = fs.readFileSync(path.join(root, 'assets/avatar', name), 'utf8');
     assert.equal(/live2dcubismcore|releases\/poc-|models\/haru|CubismFramework|https?:\/\//.test(source), false);
   }

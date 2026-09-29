@@ -5,13 +5,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
-test('Dummy-only clean checkout passes without Phase 1 assets or tooling', () => {
+test('Presentation-only clean checkout passes without Phase 1 assets or tooling', () => {
   const root = path.resolve(import.meta.dirname, '..');
   const clean = mkdtempSync(path.join(tmpdir(), 'am90-dummy-clean-'));
   const archive = execFileSync('git', ['archive', 'HEAD'], { cwd: root });
   execFileSync('tar', ['-x', '-C', clean], { input: archive });
-  const runtime = ['mobile-coach.php', 'assets/mobile-coach.js', ...['avatar-bridge.js', 'dummy-avatar-controller.js',
-    'mobile-avatar-bridge.js', 'dummy-avatar.css'].map(name => 'assets/avatar/' + name)];
+  const runtime = ['mobile-coach.php', 'assets/mobile-coach.js', 'api/coach_followup.php', ...['avatar-bridge.js', 'mira-presentation-controller.js',
+    'mobile-avatar-bridge.js', 'mira-presentation.css'].map(name => 'assets/avatar/' + name),
+    ...['neutral', 'thinking', 'encourage', 'empathy', 'smile', 'celebrate'].map(name => `assets/avatar/mira/mira-${name}.webp`)];
   const tests = ['avatar_bridge_test.mjs', 'mobile_avatar_integration_test.mjs', 'avatar_local_guard_test.mjs'];
   for (const file of [...runtime, ...tests.map(name => 'tests/' + name)]) {
     cpSync(path.join(root, file), path.join(clean, file), { recursive: true });

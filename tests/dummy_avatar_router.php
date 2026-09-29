@@ -24,8 +24,14 @@ $files = [
     '/assets/mobile-coach.css' => ['assets/mobile-coach.css', 'text/css'],
     '/assets/avatar/avatar-bridge.js' => ['assets/avatar/avatar-bridge.js', 'text/javascript'],
     '/assets/avatar/mobile-avatar-bridge.js' => ['assets/avatar/mobile-avatar-bridge.js', 'text/javascript'],
-    '/assets/avatar/dummy-avatar-controller.js' => ['assets/avatar/dummy-avatar-controller.js', 'text/javascript'],
-    '/assets/avatar/dummy-avatar.css' => ['assets/avatar/dummy-avatar.css', 'text/css'],
+    '/assets/avatar/mira-presentation-controller.js' => ['assets/avatar/mira-presentation-controller.js', 'text/javascript'],
+    '/assets/avatar/mira-presentation.css' => ['assets/avatar/mira-presentation.css', 'text/css'],
+    '/assets/avatar/mira/mira-neutral.webp' => ['assets/avatar/mira/mira-neutral.webp', 'image/webp'],
+    '/assets/avatar/mira/mira-thinking.webp' => ['assets/avatar/mira/mira-thinking.webp', 'image/webp'],
+    '/assets/avatar/mira/mira-encourage.webp' => ['assets/avatar/mira/mira-encourage.webp', 'image/webp'],
+    '/assets/avatar/mira/mira-empathy.webp' => ['assets/avatar/mira/mira-empathy.webp', 'image/webp'],
+    '/assets/avatar/mira/mira-smile.webp' => ['assets/avatar/mira/mira-smile.webp', 'image/webp'],
+    '/assets/avatar/mira/mira-celebrate.webp' => ['assets/avatar/mira/mira-celebrate.webp', 'image/webp'],
     '/service-worker.js' => ['service-worker.js', 'text/javascript'],
     '/manifest.webmanifest' => ['manifest.webmanifest', 'application/manifest+json'],
     '/assets/icons/icon-192.svg' => ['assets/icons/icon-192.svg', 'image/svg+xml'],
@@ -37,7 +43,7 @@ if (isset($files[$path])) {
     readfile($root . '/' . $file);
     return true;
 }
-if (!in_array($path, ['/api/auth.php', '/api/tasks.php', '/api/coach.php', '/fixture/reset'], true)
+if (!in_array($path, ['/api/auth.php', '/api/tasks.php', '/api/coach.php', '/api/coach_followup.php', '/fixture/reset'], true)
     || $_SERVER['REQUEST_METHOD'] !== 'POST') {
     // In particular, no Live2D release/vendor/config/Production path is served.
     http_response_code(404);
@@ -58,6 +64,25 @@ $tasks = [
 ];
 if ($path === '/api/auth.php') $response += ['csrfToken' => 'fixture-csrf', 'user' => ['id' => 1, 'email' => 'fixture@example.invalid']];
 if ($path === '/api/tasks.php') $response['tasks'] = $tasks;
+if ($path === '/api/coach_followup.php') {
+    if (($data['csrfToken'] ?? '') !== 'fixture-csrf') {
+        http_response_code(403);
+        $response = ['ok' => false, 'message' => 'Fixture CSRF failure'];
+    } elseif (trim((string)($data['question'] ?? '')) === '') {
+        http_response_code(422);
+        $response = ['ok' => false, 'message' => '質問を入力してください。'];
+    } elseif (($data['question'] ?? '') === 'FIXTURE_FAIL') {
+        http_response_code(503);
+        $response = ['ok' => false, 'message' => 'Fixture follow-up failure'];
+    } else {
+        $response += [
+            'reply' => '今日は全部を終えなくても大丈夫です。「Fixture: 次の一歩」を10分だけ進め、残りは明日に分けましょう。',
+            'question_type' => 'START_SMALL',
+            'behavior_signals' => ['LOW_COMPLETION'],
+            'intervention_type' => 'REDUCE_FRICTION',
+        ];
+    }
+}
 if ($path === '/api/coach.php') {
     if (in_array($action, ['save_checkin', 'save_journal'], true) && ($data['csrfToken'] ?? '') !== 'fixture-csrf') {
         http_response_code(403);
@@ -65,14 +90,16 @@ if ($path === '/api/coach.php') {
     } elseif ($action === 'save_checkin') {
         $state['checkin'] = ['mood' => (int)$data['mood'], 'focusMinutes' => (int)$data['focusMinutes'],
             'concern' => $data['concern'], 'taskIds' => $data['taskIds'], 'aiMessage' => 'Fixture: 小さな一歩から始めましょう。最初の15分で何をしますか？',
-            'aiResponse' => ['question_type' => 'START_SMALL', 'behavior_signals' => ['REPEATED_POSTPONEMENT'], 'intervention_type' => 'REDUCE_FRICTION']];
+            'aiResponse' => ['question_type' => 'START_SMALL', 'behavior_signals' => ['REPEATED_POSTPONEMENT'], 'intervention_type' => 'REDUCE_FRICTION',
+                'coach_message' => 'Fixture: 小さな一歩から始めましょう。最初の15分で何をしますか？']];
         $response['checkin'] = $state['checkin'];
     } elseif ($action === 'save_journal') {
         $state['completed'] = $data['completedTaskIds'];
         $state['journal'] = ['date' => '2026-09-18', 'mood' => (int)$data['mood'], 'reasonCode' => $data['reasonCode'],
             'freeText' => $data['freeText'], 'completedText' => $data['completedText'], 'completedTaskIds' => $data['completedTaskIds'],
             'aiFeedback' => 'Fixture: 2件中1件を完了しました。うまくいった方法は何ですか？',
-            'aiResponse' => ['question_type' => 'SUCCESS', 'behavior_signals' => ['GOOD_MOMENTUM'], 'intervention_type' => 'REINFORCE']];
+            'aiResponse' => ['question_type' => 'SUCCESS', 'behavior_signals' => ['GOOD_MOMENTUM'], 'intervention_type' => 'REINFORCE',
+                'coach_message' => 'Fixture: 2件中1件を完了しました。うまくいった方法は何ですか？']];
         $response += ['journal' => $state['journal'], 'history' => [$state['journal']]];
     } else $response += ['today' => '2026-09-18', 'todayTaskIds' => [501, 502], 'checkin' => $state['checkin'] ?? null,
         'journal' => $state['journal'] ?? null, 'history' => isset($state['journal']) ? [$state['journal']] : []];

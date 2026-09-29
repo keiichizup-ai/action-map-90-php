@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../assets/mobile-coach.js', import.meta.url), 'utf8');
 const ai = { question_type: 'START_SMALL', behavior_signals: ['REPEATED_POSTPONEMENT', 'private'], intervention_type: 'REDUCE_FRICTION',
-  coach_message: 'private', email: 'private', user_id: 999, reflection: 'private', tasks: ['private'], api_key: 'private' };
+  coach_message: '実際のAIコーチ回答です。次の一歩は何ですか？', email: 'private', user_id: 999, reflection: 'private', tasks: ['private'], api_key: 'private' };
 
 function fixture(mode = 'enabled') {
   const elements = new Map(); const events = []; const requests = []; const listeners = new Map();
@@ -21,7 +21,7 @@ function fixture(mode = 'enabled') {
   }
   const radios = { mobileCheckinMood: '3', mobileFocus: '30', mobileJournalMood: '4', mobileReason: 'time' };
   const document = {
-    getElementById(id) { return id === 'mobileDummyAvatar' && mode === 'disabled' ? null : element(id); },
+    getElementById(id) { return id === 'mobileMiraPresentation' && mode === 'disabled' ? null : element(id); },
     addEventListener(type, fn) { listeners.set(type, fn); },
     dispatchEvent(event) { if (mode === 'throw') throw new Error('Avatar notification failure'); events.push(event.detail); },
     querySelector(selector) {
@@ -48,7 +48,8 @@ function fixture(mode = 'enabled') {
     fetch: async (url, options) => {
       const payload = JSON.parse(options.body); requests.push({ url, payload, method: options.method, credentials: options.credentials });
       let result;
-      if (url.includes('auth')) result = { ok: true, csrfToken: 'csrf-fixture', user: { id: 999, email: 'private' } };
+      if (url.includes('coach_followup')) result = { ok: true, reply: '今日は最初の10分だけ進め、残りは明日に分けましょう。', question_type: 'START_SMALL', behavior_signals: ['LOW_COMPLETION'], intervention_type: 'REDUCE_FRICTION' };
+      else if (url.includes('auth')) result = { ok: true, csrfToken: 'csrf-fixture', user: { id: 999, email: 'private' } };
       else if (url.includes('tasks')) { taskLoads++; result = { ok: true, tasks: tasks.map(task => ({ ...task, status: savedJournal && task.id === 501 ? 'done' : task.status })) }; }
       else if (payload.action === 'save_checkin') { savedCheckin = checkin; result = { ok: true, checkin }; }
       else if (payload.action === 'save_journal') { savedJournal = journal; result = { ok: true, journal, history: [journal] }; }
@@ -94,18 +95,18 @@ test('Text uses textContent, History and task HTML escaping maintained; completi
   assert.ok(f.element('mobileCheckinTasks').innerHTML.includes('&lt;script&gt;task&lt;/script&gt;'));
   assert.equal(f.element('homeTaskCount').textContent, '2'); assert.equal(f.element('homeCompletedCount').textContent, '1'); assert.equal(f.element('homeProgressRate').textContent, '50%');
 });
-test('notifications contain only allowlisted metadata and no full coach response or user data', async () => {
+test('notifications contain only presentation-safe text, allowlisted metadata and no identity/context data', async () => {
   const f = await flow('enabled'); const serialized = JSON.stringify(f.events);
   for (const key of ['email', 'user_id', 'coach_message', 'reflection', 'tasks', 'api_key', 'csrfToken', 'private', 'Morning text']) assert.equal(serialized.includes(key), false, key);
   const response = f.events.find(event => event.type === 'response');
-  assert.deepEqual(JSON.parse(JSON.stringify(response.response)), { question_type: 'START_SMALL', behavior_signals: ['REPEATED_POSTPONEMENT'], intervention_type: 'REDUCE_FRICTION' });
+  assert.deepEqual(JSON.parse(JSON.stringify(response.response)), { question_type: 'START_SMALL', behavior_signals: ['REPEATED_POSTPONEMENT'], intervention_type: 'REDUCE_FRICTION', display_text: '実際のAIコーチ回答です。次の一歩は何ですか？' });
   assert.equal(response.animate, true);
 });
-test('reload/context refresh uses restore only; History screen is neutral and no save replay', async () => {
+test('reload/context refresh uses restore only; History suspends motion and no save replay', async () => {
   const f = await flow('enabled'); f.events.length = 0; await f.run('refreshMobileCoachContext()');
   assert.equal(f.events.every(event => !event.animate && event.type !== 'response'), true);
   assert.equal(f.events.at(-1).response.question_type, 'SUCCESS');
-  f.run("switchMobileScreen('history', false)"); assert.equal(f.events.at(-1).response.question_type, null);
+  f.run("switchMobileScreen('history', false)"); assert.equal(f.events.at(-1).type, 'history'); assert.equal(f.events.at(-1).response.question_type, null);
 });
 test('missing aiResponse and unknown question do not change text display', async () => {
   const f = await flow('enabled');
@@ -119,4 +120,34 @@ test('save errors still display error and release busy buttons even when Avatar 
   await f.run('saveMobileCheckin({ preventDefault() {} })'); await f.run('saveMobileJournal({ preventDefault() {} })');
   assert.equal(f.element('mobileCheckinMessage').textContent, 'fixture API error'); assert.equal(f.element('mobileJournalMessage').textContent, 'fixture API error');
   assert.equal(f.element('checkinSubmitBtn').disabled, false); assert.equal(f.element('journalSubmitBtn').disabled, false);
+});
+test('follow-up sends only question/recent session turns, displays reply, blocks empty and duplicate submits', async () => {
+  const f = fixture('enabled'); await f.run('refreshMobileStatus()');
+  const beforeEmpty = f.requests.length;
+  await f.run("submitMobileCoachFollowup({detail:{question:'   '}})");
+  assert.equal(f.requests.length, beforeEmpty);
+  await f.run("submitMobileCoachFollowup({detail:{question:'今日はもう疲れました。残りもやるべき？'}})");
+  const request = f.requests.find(item => item.url.includes('coach_followup'));
+  assert.deepEqual(request.payload, { csrfToken: 'csrf-fixture', question: '今日はもう疲れました。残りもやるべき？', history: [] });
+  const response = f.events.find(event => event.type === 'response' && event.response?.display_text?.includes('最初の10分'));
+  assert.equal(response.response.question_type, 'START_SMALL');
+  assert.equal(f.run('mobileState.followupHistory.length'), 2);
+
+  f.run("let followupResolve; let followupCallCount=0; postMobile=()=>{followupCallCount++; return new Promise(resolve=>followupResolve=resolve)}; var pendingFollowup=submitMobileCoachFollowup({detail:{question:'A'}}); submitMobileCoachFollowup({detail:{question:'B'}})");
+  assert.equal(f.run('followupCallCount'), 1);
+  f.run("followupResolve({reply:'回答',question_type:'NEXT_STEP',behavior_signals:[],intervention_type:'START_NEXT'})");
+  await f.run('pendingFollowup');
+});
+test('follow-up API failure keeps prior response and exposes friendly presentation error', async () => {
+  const f = fixture('enabled'); await f.run('refreshMobileStatus()');
+  f.run("mobileState.followupResponse={question_type:'WHY',behavior_signals:[],intervention_type:'START_NEXT',coach_message:'保持する回答'}; postMobile=async()=>{throw new Error('private failure')}");
+  await f.run("submitMobileCoachFollowup({detail:{question:'追加の質問'}})");
+  const status = f.events.filter(event => event.type === 'followup-ui').at(-1);
+  assert.equal(status.error, 'うまく回答できませんでした。もう一度試してください。');
+  assert.equal(status.busy, false);
+  assert.equal(f.events.some(event => JSON.stringify(event).includes('private failure')), false);
+  assert.equal(f.events.some(event => event.type === 'followup-start'), true);
+  assert.equal(f.events.some(event => event.type === 'followup-restore'), true);
+  assert.equal(f.run('mobileFollowupRunning'), false);
+  assert.equal(f.run('mobileState.followupResponse.coach_message'), '保持する回答');
 });

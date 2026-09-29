@@ -26,7 +26,7 @@ function dummy_avatar_enabled(array $server, string $sapi, string $directory): b
         && $directory === '/home/keiichizup/www/action-map-90-staging';
     return $local || $staging;
 }
-$dummyAvatarEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
+$presentationMiraEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
 ?>
 <!doctype html>
 <html lang="ja" data-service-worker-url="<?= html_attribute($serviceWorkerUrl) ?>">
@@ -42,8 +42,8 @@ $dummyAvatarEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
   <link rel="apple-touch-icon" href="<?= html_attribute($appleTouchIconUrl) ?>">
   <link rel="stylesheet" href="<?= html_attribute($mobileStyleUrl) ?>">
   <script defer src="<?= html_attribute($mobileScriptUrl) ?>"></script>
-<?php if ($dummyAvatarEnabled): ?>
-  <link rel="stylesheet" href="<?= html_attribute(versioned_asset_url('assets/avatar/dummy-avatar.css')) ?>">
+<?php if ($presentationMiraEnabled): ?>
+  <link rel="stylesheet" href="<?= html_attribute(versioned_asset_url('assets/avatar/mira-presentation.css')) ?>">
   <script type="module" src="<?= html_attribute(versioned_asset_url('assets/avatar/mobile-avatar-bridge.js')) ?>"></script>
 <?php endif; ?>
 </head>
@@ -80,10 +80,10 @@ $dummyAvatarEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
         <button id="mobileLogoutBtn" type="button" class="menu-item danger">ログアウト</button>
       </div>
 
-<?php if ($dummyAvatarEnabled): ?>
-      <div id="mobileDummyAvatar" class="dummy-avatar-host" hidden
+<?php if ($presentationMiraEnabled): ?>
+      <div id="mobileMiraPresentation" class="mira-presentation-host" hidden
            data-avatar-bridge-url="<?= html_attribute(versioned_asset_url('assets/avatar/avatar-bridge.js')) ?>"
-           data-avatar-controller-url="<?= html_attribute(versioned_asset_url('assets/avatar/dummy-avatar-controller.js')) ?>"></div>
+           data-avatar-controller-url="<?= html_attribute(versioned_asset_url('assets/avatar/mira-presentation-controller.js')) ?>"></div>
 <?php endif; ?>
 
       <section id="homeScreen" class="mobile-screen">

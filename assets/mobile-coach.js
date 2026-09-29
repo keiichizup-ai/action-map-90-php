@@ -7,6 +7,8 @@ const mobileState = {
   checkin: null,
   journal: null,
   history: [],
+  followupHistory: [],
+  followupResponse: null,
   deferredPrompt: null,
   currentScreen: 'home'
 };
@@ -27,6 +29,7 @@ function bindMobileEvents() {
   $('mobileCheckinForm').addEventListener('submit', saveMobileCheckin);
   $('mobileJournalForm').addEventListener('submit', saveMobileJournal);
   $('installAppBtn').addEventListener('click', installPwa);
+  document.addEventListener('mobile-coach-followup-submit', submitMobileCoachFollowup);
 
   document.querySelectorAll('[data-mobile-screen]').forEach((button) => {
     button.addEventListener('click', () => switchMobileScreen(button.dataset.mobileScreen));
@@ -37,6 +40,55 @@ function bindMobileEvents() {
       $('mobileMenu').classList.add('hidden');
     }
   });
+}
+
+let mobileFollowupRunning = false;
+
+async function submitMobileCoachFollowup(event) {
+  const question = typeof event.detail?.question === 'string'
+    ? event.detail.question.replace(/\s+/gu, ' ').trim().slice(0, 500)
+    : '';
+  if (!question || mobileFollowupRunning || !mobileState.user) return;
+  mobileFollowupRunning = true;
+  notifyMobileAvatarUi({ busy: true, error: '' });
+  notifyMobileAvatar('followup-start');
+  try {
+    const result = await postMobile('./api/coach_followup.php', {
+      csrfToken: mobileState.csrfToken,
+      question,
+      history: mobileState.followupHistory.slice(-4)
+    });
+    const response = {
+      question_type: result.question_type,
+      behavior_signals: result.behavior_signals,
+      intervention_type: result.intervention_type,
+      coach_message: result.reply
+    };
+    mobileState.followupHistory = [...mobileState.followupHistory,
+      { role: 'user', text: question },
+      { role: 'assistant', text: result.reply }
+    ].slice(-4);
+    mobileState.followupResponse = response;
+    notifyMobileAvatar('response', response, mobileState.currentScreen);
+    notifyMobileAvatarUi({ busy: false, error: '', clear: true });
+  } catch (_) {
+    notifyMobileAvatar('followup-restore');
+    notifyMobileAvatarUi({
+      busy: false,
+      error: 'うまく回答できませんでした。もう一度試してください。'
+    });
+  } finally {
+    mobileFollowupRunning = false;
+  }
+}
+
+function notifyMobileAvatarUi(detail) {
+  if (!$('mobileMiraPresentation')) return;
+  try {
+    document.dispatchEvent(new CustomEvent('mobile-coach-avatar', {
+      detail: { type: 'followup-ui', ...detail }
+    }));
+  } catch (_) { /* Presentation UI failure must not affect Mobile Coach. */ }
 }
 
 let mobileRefreshRunning = false;
@@ -385,7 +437,7 @@ function switchMobileScreen(name, scroll = true) {
   });
 
   if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
-  notifyMobileAvatar('screen');
+  notifyMobileAvatar(mobileState.currentScreen === 'history' ? 'history' : 'screen');
 }
 
 function showMobileAuth() {
@@ -400,12 +452,13 @@ function showMobileApp() {
   notifyMobileAvatar('enable');
 }
 
-// Optional, one-way notifications. Never send text, identity, tasks or API payloads.
+// Optional, one-way notifications. Only presentation-safe text and allowlisted metadata are sent.
 function notifyMobileAvatar(type, response, coachType = '') {
-  if (!$('mobileDummyAvatar')) return;
+  if (!$('mobileMiraPresentation')) return;
   try {
     const screen = mobileState.currentScreen;
-    const saved = screen === 'morning' ? mobileState.checkin
+    const saved = mobileState.followupResponse ? { aiResponse: mobileState.followupResponse }
+      : screen === 'morning' ? mobileState.checkin
       : screen === 'evening' ? mobileState.journal
       : screen === 'home' ? mobileState.journal || mobileState.checkin : null;
     const source = response === undefined ? saved?.aiResponse : response;
@@ -416,12 +469,18 @@ function notifyMobileAvatar(type, response, coachType = '') {
       behavior_signals: Array.isArray(source?.behavior_signals)
         ? [...new Set(source.behavior_signals.filter(value => signals.includes(value)))].slice(0, 4) : [],
       intervention_type: ['REDUCE_FRICTION', 'NARROW_FOCUS', 'REPLAN', 'REINFORCE', 'START_NEXT'].includes(source?.intervention_type)
-        ? source.intervention_type : null
+        ? source.intervention_type : null,
+      display_text: presentationCoachText(source?.coach_message || saved?.aiFeedback || saved?.aiMessage)
     };
     document.dispatchEvent(new CustomEvent('mobile-coach-avatar', {
       detail: { type, response: metadata, animate: type === 'response' && (screen === 'home' || screen === coachType) }
     }));
   } catch (_) { /* Avatar must never affect save/load/text rendering. */ }
+}
+
+function presentationCoachText(value) {
+  if (typeof value !== 'string' || /<[^>]*>|```/u.test(value)) return '';
+  return value.replace(/\s+/gu, ' ').trim().slice(0, 500);
 }
 
 function selectedValue(name, fallback) {

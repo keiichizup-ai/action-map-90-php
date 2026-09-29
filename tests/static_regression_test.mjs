@@ -14,6 +14,7 @@ const tasks = read("api/tasks.php");
 const coach = read("api/coach.php");
 const context = read("api/coach_context.php");
 const coachResponse = read("api/coach_response.php");
+const coachFollowup = read("api/coach_followup.php");
 const serviceWorker = read("service-worker.js");
 const assetVersion = read("asset_version.php");
 const desktopPage = read("index.php");
@@ -44,6 +45,10 @@ expect(coachResponse.includes("'store' => false"), "Responses API storage is dis
 expect(coachResponse.includes("validateCoachTargetTaskId") && coachResponse.includes("=== 'done'"), "Coach target tasks are revalidated and completed tasks are rejected.");
 expect(coachResponse.includes("buildCoachFallbackResponse") && coachResponse.includes("isSingleCoachQuestion"), "Invalid or failed AI responses use a validated one-question fallback.");
 expect(!coachResponse.includes("user_id' =>") && !coachResponse.includes("email' =>") && !coachResponse.includes("ai_result"), "Coach prompts do not include user identity or the full plan.");
+expect(coachFollowup.includes("current_user_id()") && coachFollowup.includes("require_csrf($data)"), "Follow-up uses authenticated session context and CSRF protection.");
+expect(coachFollowup.includes("buildCoachContext($userId") && !coachFollowup.includes("$data['user_id']") && !coachFollowup.includes("$data['task"), "Follow-up context is server-owned and user-scoped.");
+expect(coachFollowup.includes("'store' => false") && coachFollowup.includes("json_schema") && coachFollowup.includes("strict' => true"), "Follow-up uses private strict structured output.");
+expect(coachFollowup.includes("/action-map-90-staging/api/coach_followup.php") && coachFollowup.includes("str_starts_with($script, '/action-map-90/')"), "Follow-up endpoint retains an explicit staging/local-only guard.");
 expect(serviceWorker.includes("event.request.method !== 'GET'") && serviceWorker.includes("isApiRequest(requestUrl)"), "Service Worker does not cache POST/API responses.");
 expect(serviceWorker.includes("event.request.mode === 'navigate'") && serviceWorker.includes("networkFirstNavigation"), "HTML navigation uses network-first handling.");
 expect(serviceWorker.includes("encodeURIComponent(SCOPE_PATH)") && serviceWorker.includes("cacheName.startsWith(CACHE_PREFIX)"), "Service Worker cache names and current-cache cleanup are scope-specific.");
