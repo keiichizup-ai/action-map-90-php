@@ -43,7 +43,7 @@ if (isset($files[$path])) {
     readfile($root . '/' . $file);
     return true;
 }
-if (!in_array($path, ['/api/auth.php', '/api/tasks.php', '/api/coach.php', '/api/coach_followup.php', '/fixture/reset'], true)
+if (!in_array($path, ['/api/auth.php', '/api/tasks.php', '/api/coach.php', '/api/coach_followup.php', '/api/coach_speech.php', '/fixture/reset'], true)
     || $_SERVER['REQUEST_METHOD'] !== 'POST') {
     // In particular, no Live2D release/vendor/config/Production path is served.
     http_response_code(404);
@@ -64,6 +64,24 @@ $tasks = [
 ];
 if ($path === '/api/auth.php') $response += ['csrfToken' => 'fixture-csrf', 'user' => ['id' => 1, 'email' => 'fixture@example.invalid']];
 if ($path === '/api/tasks.php') $response['tasks'] = $tasks;
+if ($path === '/api/coach_speech.php') {
+    if (($data['csrfToken'] ?? '') !== 'fixture-csrf' || trim((string)($data['text'] ?? '')) === '') {
+        http_response_code(422);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false], JSON_THROW_ON_ERROR);
+        return true;
+    }
+    // Deterministic 100 ms silent PCM WAV for local browser playback only.
+    $sampleRate = 8000;
+    $samples = 800;
+    $pcm = str_repeat("\0\0", $samples);
+    $wav = 'RIFF' . pack('V', 36 + strlen($pcm)) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, $sampleRate, $sampleRate * 2, 2, 16)
+        . 'data' . pack('V', strlen($pcm)) . $pcm;
+    header('Content-Type: audio/wav');
+    header('Content-Length: ' . strlen($wav));
+    echo $wav;
+    return true;
+}
 if ($path === '/api/coach_followup.php') {
     if (($data['csrfToken'] ?? '') !== 'fixture-csrf') {
         http_response_code(403);

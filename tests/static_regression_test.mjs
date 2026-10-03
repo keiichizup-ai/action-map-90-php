@@ -15,6 +15,8 @@ const coach = read("api/coach.php");
 const context = read("api/coach_context.php");
 const coachResponse = read("api/coach_response.php");
 const coachFollowup = read("api/coach_followup.php");
+const coachSpeech = read("api/coach_speech.php");
+const coachTranscribe = read("api/coach_transcribe.php");
 const serviceWorker = read("service-worker.js");
 const assetVersion = read("asset_version.php");
 const desktopPage = read("index.php");
@@ -49,6 +51,18 @@ expect(coachFollowup.includes("current_user_id()") && coachFollowup.includes("re
 expect(coachFollowup.includes("buildCoachContext($userId") && !coachFollowup.includes("$data['user_id']") && !coachFollowup.includes("$data['task"), "Follow-up context is server-owned and user-scoped.");
 expect(coachFollowup.includes("'store' => false") && coachFollowup.includes("json_schema") && coachFollowup.includes("strict' => true"), "Follow-up uses private strict structured output.");
 expect(coachFollowup.includes("/action-map-90-staging/api/coach_followup.php") && coachFollowup.includes("str_starts_with($script, '/action-map-90/')"), "Follow-up endpoint retains an explicit staging/local-only guard.");
+expect(coachSpeech.includes("current_user_id()") && coachSpeech.includes("require_csrf($data)")
+  && coachSpeech.includes("/action-map-90-staging/api/coach_speech.php") && coachSpeech.includes("str_starts_with($script, '/action-map-90/')"),
+"ElevenLabs speech is authenticated, CSRF-protected and staging/local-only.");
+expect(coachSpeech.includes("ELEVENLABS_API_KEY") && coachSpeech.includes("xi-api-key:")
+  && !mobileScript.includes("ELEVENLABS_API_KEY") && !mobileScript.includes("LKD32PsGTGpoVmYgvAOv"),
+"ElevenLabs key and selected voice ID remain server-side.");
+expect(coachSpeech.includes("COACH_SPEECH_MAX_TEXT") && coachSpeech.includes("containsCoachSpeechMarkup")
+  && !coachSpeech.includes("file_put_contents") && !coachSpeech.includes("tempnam"),
+"Speech accepts bounded plain text and does not persist generated audio.");
+expect(coachTranscribe.includes("current_user_id()") && coachTranscribe.includes("require_csrf($_POST)")
+  && coachTranscribe.includes("deleteCoachAudioUpload($temporaryPath)") && coachTranscribe.includes("COACH_TRANSCRIBE_MAX_DURATION_MS"),
+"Microphone transcription is authenticated, bounded, and deletes temporary uploads.");
 expect(serviceWorker.includes("event.request.method !== 'GET'") && serviceWorker.includes("isApiRequest(requestUrl)"), "Service Worker does not cache POST/API responses.");
 expect(serviceWorker.includes("event.request.mode === 'navigate'") && serviceWorker.includes("networkFirstNavigation"), "HTML navigation uses network-first handling.");
 expect(serviceWorker.includes("encodeURIComponent(SCOPE_PATH)") && serviceWorker.includes("cacheName.startsWith(CACHE_PREFIX)"), "Service Worker cache names and current-cache cleanup are scope-specific.");
@@ -56,6 +70,12 @@ expect(serviceWorker.includes("removeCurrentScopeFromLegacyCache") && serviceWor
 expect(serviceWorker.includes("ignoreSearch: true") && serviceWorker.includes("cacheLatestPathVersion"), "Versioned assets use consistent exact cache keys with an offline query fallback.");
 expect(assetVersion.includes("hash_file('sha256'") && desktopPage.includes("versioned_asset_url('assets/app.js')") && mobilePage.includes("versioned_asset_url('assets/mobile-coach.js')"), "Asset versions are content-derived through one shared helper.");
 expect(desktopPage.includes("send_no_store_html_headers()") && mobilePage.includes("send_no_store_html_headers()"), "Desktop and Mobile HTML send no-store headers.");
+expect(!mobilePage.includes('id="mobileConcern"') && !mobilePage.includes('id="mobileCheckinMessage"')
+  && !mobilePage.includes('id="mobileJournalMessage"') && !mobilePage.includes('AIコーチに相談する（任意）'),
+"Mobile Check-in has no duplicate Coach input or response boxes.");
+expect(mobileScript.includes("concern: ''") && mobileScript.includes("showFormStatus('mobileCheckinStatus', error.message)")
+  && mobileScript.includes("showFormStatus('mobileJournalStatus', error.message)"),
+"Morning keeps API compatibility while save errors remain accessible outside the Coach bubble.");
 expect(mobileScript.includes("scope: './'") && mobileScript.includes("updateViaCache: 'none'") && mobileScript.includes("registration.update()"), "Service Worker registration fixes the application scope and bypasses the HTTP cache for updates.");
 expect(!registerPwaSource.includes("location.reload") && !registerPwaSource.includes("controllerchange"), "Service Worker updates do not force-reload a page with user input.");
 expect(!health.includes("DB_HOST") && !health.includes("DB_NAME") && !health.includes("DB_USER"), "Public health does not expose DB metadata.");

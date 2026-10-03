@@ -30,6 +30,10 @@ function bindMobileEvents() {
   $('mobileJournalForm').addEventListener('submit', saveMobileJournal);
   $('installAppBtn').addEventListener('click', installPwa);
   document.addEventListener('mobile-coach-followup-submit', submitMobileCoachFollowup);
+  document.addEventListener('mobile-coach-voice-toggle', toggleMobileVoiceRecording);
+  document.addEventListener('mobile-coach-voice-replay', replayMobileCoachVoice);
+  document.addEventListener('mobile-coach-voice-stop', () => stopMobileVoicePlayback({ keepReplay: true }));
+  window.addEventListener('pagehide', () => disposeMobileVoice());
 
   document.querySelectorAll('[data-mobile-screen]').forEach((button) => {
     button.addEventListener('click', () => switchMobileScreen(button.dataset.mobileScreen));
@@ -43,6 +47,23 @@ function bindMobileEvents() {
 }
 
 let mobileFollowupRunning = false;
+const MOBILE_VOICE_MAX_DURATION_MS = 30000;
+const MOBILE_VOICE_MAX_AUDIO_BYTES = 5000000;
+const MOBILE_VOICE_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+const mobileVoice = {
+  state: 'IDLE',
+  requestingMic: false,
+  recorder: null,
+  stream: null,
+  chunks: [],
+  startedAt: 0,
+  timer: null,
+  discardRecording: false,
+  audio: null,
+  objectUrl: '',
+  speechAbort: null,
+  speechRequestId: 0
+};
 
 async function submitMobileCoachFollowup(event) {
   const question = typeof event.detail?.question === 'string'
@@ -69,8 +90,9 @@ async function submitMobileCoachFollowup(event) {
       { role: 'assistant', text: result.reply }
     ].slice(-4);
     mobileState.followupResponse = response;
-    notifyMobileAvatar('response', response, mobileState.currentScreen);
+    notifyMobileAvatar('response', response, mobileState.currentScreen, false);
     notifyMobileAvatarUi({ busy: false, error: '', clear: true });
+    void requestMobileCoachSpeech(result.reply);
   } catch (_) {
     notifyMobileAvatar('followup-restore');
     notifyMobileAvatarUi({
@@ -89,6 +111,298 @@ function notifyMobileAvatarUi(detail) {
       detail: { type: 'followup-ui', ...detail }
     }));
   } catch (_) { /* Presentation UI failure must not affect Mobile Coach. */ }
+}
+
+function notifyMobileVoiceUi(detail) {
+  if (!$('mobileMiraPresentation')) return;
+  try {
+    document.dispatchEvent(new CustomEvent('mobile-coach-avatar', {
+      detail: { type: 'voice-ui', ...detail }
+    }));
+  } catch (_) { /* Voice UI failure must not affect Text Coach. */ }
+}
+
+function notifyMobileVoiceState(type) {
+  try {
+    notifyMobileAvatar(type);
+  } catch (_) { /* Voice presentation is optional. */ }
+}
+
+function supportedMobileVoiceMimeType() {
+  const Recorder = globalThis.MediaRecorder;
+  if (typeof Recorder !== 'function') return '';
+  if (typeof Recorder.isTypeSupported !== 'function') return '';
+  return MOBILE_VOICE_MIME_TYPES.find(type => Recorder.isTypeSupported(type)) || '';
+}
+
+function mobileVoiceFilename(mimeType) {
+  if (isMobileVoiceMp4Mime(mimeType)) return 'mira-recording.m4a';
+  if (mimeType.startsWith('audio/ogg')) return 'mira-recording.ogg';
+  return 'mira-recording.webm';
+}
+
+function isMobileVoiceMp4Mime(mimeType) {
+  return ['audio/mp4', 'video/mp4', 'audio/x-m4a', 'application/mp4']
+    .includes(String(mimeType || '').toLowerCase().split(';', 1)[0].trim());
+}
+
+function mobileVoiceRecorderTimeslice(mimeType) {
+  return !mimeType || isMobileVoiceMp4Mime(mimeType) ? null : 250;
+}
+
+function mobileTranscriptionErrorMessage(errorCode) {
+  if (errorCode === 'unsupported_audio_format') {
+    return 'この端末の録音形式を処理できませんでした。Safariを最新にするか、テキストで質問してください。';
+  }
+  if (errorCode === 'invalid_audio') {
+    return '録音データが正しくありません。もう一度お試しください。';
+  }
+  return '音声を文字にできませんでした。テキストで質問してください。';
+}
+
+function stopMobileVoiceTracks() {
+  for (const track of mobileVoice.stream?.getTracks?.() || []) {
+    try { track.stop(); } catch (_) { /* Best-effort privacy cleanup. */ }
+  }
+  mobileVoice.stream = null;
+}
+
+async function toggleMobileVoiceRecording() {
+  if (mobileVoice.state === 'RECORDING') {
+    stopMobileVoiceRecording();
+    return;
+  }
+  if (mobileVoice.requestingMic || mobileVoice.state === 'TRANSCRIBING' || !mobileState.user) return;
+  await startMobileVoiceRecording();
+}
+
+async function startMobileVoiceRecording() {
+  const Recorder = globalThis.MediaRecorder;
+  if (typeof Recorder !== 'function' || !navigator.mediaDevices?.getUserMedia) {
+    notifyMobileVoiceUi({ state: 'IDLE', error: 'このブラウザでは音声入力を利用できません。テキストで質問してください。', canReplay: Boolean(mobileVoice.audio) });
+    return;
+  }
+  mobileVoice.requestingMic = true;
+  stopMobileVoicePlayback({ keepReplay: true });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = supportedMobileVoiceMimeType();
+    const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
+    mobileVoice.stream = stream;
+    mobileVoice.recorder = recorder;
+    mobileVoice.chunks = [];
+    mobileVoice.startedAt = Date.now();
+    mobileVoice.discardRecording = false;
+    recorder.addEventListener('dataavailable', event => {
+      if (event.data?.size > 0) mobileVoice.chunks.push(event.data);
+    });
+    recorder.addEventListener('stop', () => void finishMobileVoiceRecording(recorder));
+    recorder.addEventListener('error', () => cancelMobileVoiceRecording('録音に失敗しました。テキストで質問してください。'));
+    const timeslice = mobileVoiceRecorderTimeslice(mimeType);
+    if (timeslice === null) recorder.start();
+    else recorder.start(timeslice);
+    mobileVoice.state = 'RECORDING';
+    mobileVoice.timer = setTimeout(() => stopMobileVoiceRecording(), MOBILE_VOICE_MAX_DURATION_MS);
+    notifyMobileVoiceUi({ state: 'RECORDING', error: '', canReplay: Boolean(mobileVoice.audio) });
+    notifyMobileVoiceState('voice-recording');
+  } catch (_) {
+    stopMobileVoiceTracks();
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: 'マイクを利用できません。許可を確認するか、テキストで質問してください。', canReplay: Boolean(mobileVoice.audio) });
+    notifyMobileVoiceState('voice-idle');
+  } finally {
+    mobileVoice.requestingMic = false;
+  }
+}
+
+function stopMobileVoiceRecording({ discard = false } = {}) {
+  if (mobileVoice.timer) clearTimeout(mobileVoice.timer);
+  mobileVoice.timer = null;
+  mobileVoice.discardRecording = discard;
+  const recorder = mobileVoice.recorder;
+  if (recorder && recorder.state !== 'inactive') {
+    try { recorder.stop(); } catch (_) { cancelMobileVoiceRecording('録音を停止できませんでした。'); }
+  } else {
+    stopMobileVoiceTracks();
+  }
+}
+
+function cancelMobileVoiceRecording(message = '') {
+  mobileVoice.discardRecording = true;
+  if (mobileVoice.timer) clearTimeout(mobileVoice.timer);
+  mobileVoice.timer = null;
+  const recorder = mobileVoice.recorder;
+  if (recorder && recorder.state !== 'inactive') {
+    try { recorder.stop(); } catch (_) { /* Tracks are stopped below. */ }
+  }
+  mobileVoice.recorder = null;
+  mobileVoice.chunks = [];
+  stopMobileVoiceTracks();
+  mobileVoice.state = 'IDLE';
+  notifyMobileVoiceUi({ state: 'IDLE', error: message, canReplay: Boolean(mobileVoice.audio) });
+  notifyMobileVoiceState('voice-idle');
+}
+
+async function finishMobileVoiceRecording(recorder) {
+  if (recorder !== mobileVoice.recorder) return;
+  const durationMs = Math.max(1, Math.min(MOBILE_VOICE_MAX_DURATION_MS, Date.now() - mobileVoice.startedAt));
+  const discarded = mobileVoice.discardRecording;
+  const chunks = mobileVoice.chunks;
+  const mimeType = recorder.mimeType || chunks[0]?.type || 'audio/webm';
+  mobileVoice.recorder = null;
+  mobileVoice.chunks = [];
+  stopMobileVoiceTracks();
+  if (discarded) {
+    mobileVoice.state = 'IDLE';
+    return;
+  }
+  const blob = new Blob(chunks, { type: mimeType });
+  if (blob.size <= 0 || blob.size > MOBILE_VOICE_MAX_AUDIO_BYTES) {
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: '録音データが正しくありません。もう一度お試しください。', canReplay: Boolean(mobileVoice.audio) });
+    notifyMobileVoiceState('voice-idle');
+    return;
+  }
+  await transcribeMobileVoice(blob, durationMs, mimeType);
+}
+
+async function transcribeMobileVoice(blob, durationMs, mimeType) {
+  mobileVoice.state = 'TRANSCRIBING';
+  notifyMobileVoiceUi({ state: 'TRANSCRIBING', error: '', canReplay: Boolean(mobileVoice.audio) });
+  notifyMobileVoiceState('voice-transcribing');
+  let failureCode = '';
+  try {
+    const data = new FormData();
+    data.append('csrfToken', mobileState.csrfToken);
+    data.append('durationMs', String(durationMs));
+    data.append('audio', blob, mobileVoiceFilename(mimeType));
+    const response = await fetch('./api/coach_transcribe.php', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: data
+    });
+    const result = await response.json().catch(() => ({ ok: false }));
+    failureCode = typeof result.error_code === 'string' ? result.error_code : '';
+    const transcript = presentationCoachText(result.transcript);
+    if (!response.ok || result.ok === false || !transcript) throw new Error('transcription failed');
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: '', canReplay: Boolean(mobileVoice.audio), transcript });
+    notifyMobileVoiceState('voice-idle');
+  } catch (_) {
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: mobileTranscriptionErrorMessage(failureCode), canReplay: Boolean(mobileVoice.audio) });
+    notifyMobileVoiceState('voice-idle');
+  }
+}
+
+async function requestMobileCoachSpeech(text) {
+  const speechText = presentationCoachText(text);
+  if (!speechText) return;
+  const requestId = ++mobileVoice.speechRequestId;
+  mobileVoice.speechAbort?.abort?.();
+  stopMobileVoicePlayback({ keepReplay: false });
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  mobileVoice.speechAbort = controller;
+  mobileVoice.state = 'THINKING';
+  notifyMobileVoiceUi({ state: 'THINKING', error: '', canReplay: false });
+  try {
+    const response = await fetch('./api/coach_speech.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ csrfToken: mobileState.csrfToken, text: speechText }),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().startsWith('audio/')) {
+      throw new Error('speech failed');
+    }
+    const blob = await response.blob();
+    if (requestId !== mobileVoice.speechRequestId || blob.size <= 0 || blob.size > MOBILE_VOICE_MAX_AUDIO_BYTES) return;
+    mobileVoice.objectUrl = URL.createObjectURL(blob);
+    mobileVoice.audio = new Audio(mobileVoice.objectUrl);
+    mobileVoice.audio.preload = 'auto';
+    mobileVoice.audio.addEventListener('ended', finishMobileVoicePlayback);
+    mobileVoice.audio.addEventListener('error', failMobileVoicePlayback);
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: '', canReplay: true });
+    await playMobileCoachVoice();
+  } catch (error) {
+    if (error?.name === 'AbortError' || requestId !== mobileVoice.speechRequestId) return;
+    mobileVoice.state = 'IDLE';
+    notifyMobileVoiceUi({ state: 'IDLE', error: '音声を再生できませんでした。テキスト回答はそのまま確認できます。', canReplay: Boolean(mobileVoice.audio) });
+    notifyMobileVoiceState('speech-end');
+  } finally {
+    if (requestId === mobileVoice.speechRequestId) mobileVoice.speechAbort = null;
+  }
+}
+
+async function playMobileCoachVoice() {
+  const audio = mobileVoice.audio;
+  if (!audio) return;
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    mobileVoice.state = 'SPEAKING';
+    notifyMobileVoiceUi({ state: 'SPEAKING', error: '', canReplay: true });
+    notifyMobileVoiceState('speech-start');
+    await audio.play();
+  } catch (_) {
+    failMobileVoicePlayback();
+  }
+}
+
+function replayMobileCoachVoice() {
+  void playMobileCoachVoice();
+}
+
+function finishMobileVoicePlayback() {
+  mobileVoice.state = 'IDLE';
+  notifyMobileVoiceUi({ state: 'IDLE', error: '', canReplay: Boolean(mobileVoice.audio) });
+  notifyMobileVoiceState('speech-end');
+}
+
+function failMobileVoicePlayback() {
+  mobileVoice.audio?.pause?.();
+  mobileVoice.state = 'IDLE';
+  notifyMobileVoiceUi({ state: 'IDLE', error: '音声を再生できませんでした。再生ボタンをお試しください。', canReplay: Boolean(mobileVoice.audio) });
+  notifyMobileVoiceState('speech-end');
+}
+
+function stopMobileVoicePlayback({ keepReplay = true } = {}) {
+  if (mobileVoice.audio) {
+    try {
+      mobileVoice.audio.pause();
+      mobileVoice.audio.currentTime = 0;
+    } catch (_) { /* Playback stop is best effort. */ }
+  }
+  if (mobileVoice.state === 'SPEAKING') notifyMobileVoiceState('speech-end');
+  mobileVoice.state = 'IDLE';
+  if (!keepReplay) releaseMobileVoiceAudio();
+  notifyMobileVoiceUi({ state: 'IDLE', error: '', canReplay: keepReplay && Boolean(mobileVoice.audio) });
+}
+
+function releaseMobileVoiceAudio() {
+  if (mobileVoice.audio) {
+    try {
+      mobileVoice.audio.pause();
+      mobileVoice.audio.removeAttribute?.('src');
+      mobileVoice.audio.load?.();
+    } catch (_) { /* Object URL cleanup continues. */ }
+  }
+  if (mobileVoice.objectUrl) URL.revokeObjectURL(mobileVoice.objectUrl);
+  mobileVoice.audio = null;
+  mobileVoice.objectUrl = '';
+}
+
+function disposeMobileVoice() {
+  mobileVoice.speechRequestId++;
+  mobileVoice.speechAbort?.abort?.();
+  mobileVoice.speechAbort = null;
+  stopMobileVoiceRecording({ discard: true });
+  stopMobileVoiceTracks();
+  releaseMobileVoiceAudio();
+  mobileVoice.state = 'IDLE';
 }
 
 let mobileRefreshRunning = false;
@@ -157,6 +471,7 @@ async function loginMobile(event) {
 }
 
 async function logoutMobile() {
+  disposeMobileVoice();
   await postMobile('./api/auth.php', { action: 'logout', csrfToken: mobileState.csrfToken });
   location.reload();
 }
@@ -325,26 +640,22 @@ function fillSavedValues() {
   if (c) {
     setRadio('mobileCheckinMood', c.mood);
     setRadio('mobileFocus', c.focusMinutes);
-    $('mobileConcern').value = c.concern || '';
-    showResponse('mobileCheckinMessage', c.aiMessage);
-  } else {
-    showResponse('mobileCheckinMessage', '');
   }
+  showFormStatus('mobileCheckinStatus', '');
 
   if (j) {
     setRadio('mobileJournalMood', j.mood);
     setRadio('mobileReason', j.reasonCode || 'none');
     $('mobileJournalText').value = j.freeText || j.completedText || '';
-    showResponse('mobileJournalMessage', j.aiFeedback);
-  } else {
-    showResponse('mobileJournalMessage', '');
   }
+  showFormStatus('mobileJournalStatus', '');
 }
 
 async function saveMobileCheckin(event) {
   event.preventDefault();
   const button = $('checkinSubmitBtn');
   setButtonBusy(button, true, 'AIコーチが考えています…');
+  showFormStatus('mobileCheckinStatus', '');
   notifyMobileAvatar('thinking');
 
   try {
@@ -354,17 +665,16 @@ async function saveMobileCheckin(event) {
       date: mobileState.today,
       mood: selectedValue('mobileCheckinMood', 3),
       focusMinutes: selectedValue('mobileFocus', 30),
-      concern: $('mobileConcern').value,
+      concern: '',
       taskIds: checkedValues('morningTask')
     });
 
     mobileState.checkin = result.checkin;
     renderMobileData();
-    showResponse('mobileCheckinMessage', result.checkin.aiMessage);
     notifyMobileAvatar('response', result.checkin.aiResponse, 'morning');
     toast('今日のチェックインを保存しました');
   } catch (error) {
-    showResponse('mobileCheckinMessage', error.message);
+    showFormStatus('mobileCheckinStatus', error.message);
     notifyMobileAvatar('idle');
   } finally {
     setButtonBusy(button, false);
@@ -375,6 +685,7 @@ async function saveMobileJournal(event) {
   event.preventDefault();
   const button = $('journalSubmitBtn');
   setButtonBusy(button, true, 'AIコーチが振り返っています…');
+  showFormStatus('mobileJournalStatus', '');
   notifyMobileAvatar('thinking');
   const text = $('mobileJournalText').value.trim();
 
@@ -396,11 +707,10 @@ async function saveMobileJournal(event) {
     mobileState.history = result.history || [];
     await loadMobileTasks();
     renderMobileData();
-    showResponse('mobileJournalMessage', result.journal.aiFeedback);
     notifyMobileAvatar('response', result.journal.aiResponse, 'evening');
     toast('今日の振り返りを保存しました');
   } catch (error) {
-    showResponse('mobileJournalMessage', error.message);
+    showFormStatus('mobileJournalStatus', error.message);
     notifyMobileAvatar('idle');
   } finally {
     setButtonBusy(button, false);
@@ -427,6 +737,7 @@ function renderHistory() {
 function switchMobileScreen(name, scroll = true) {
   const screens = ['home', 'morning', 'evening', 'history'];
   mobileState.currentScreen = screens.includes(name) ? name : 'home';
+  if (mobileState.currentScreen === 'history') disposeMobileVoice();
 
   screens.forEach((screen) => {
     $(`${screen}Screen`).classList.toggle('hidden', screen !== mobileState.currentScreen);
@@ -441,6 +752,7 @@ function switchMobileScreen(name, scroll = true) {
 }
 
 function showMobileAuth() {
+  disposeMobileVoice();
   $('mobileAuth').classList.remove('hidden');
   $('mobileAppView').classList.add('hidden');
   notifyMobileAvatar('disable');
@@ -453,7 +765,7 @@ function showMobileApp() {
 }
 
 // Optional, one-way notifications. Only presentation-safe text and allowlisted metadata are sent.
-function notifyMobileAvatar(type, response, coachType = '') {
+function notifyMobileAvatar(type, response, coachType = '', animateOverride = null) {
   if (!$('mobileMiraPresentation')) return;
   try {
     const screen = mobileState.currentScreen;
@@ -473,7 +785,13 @@ function notifyMobileAvatar(type, response, coachType = '') {
       display_text: presentationCoachText(source?.coach_message || saved?.aiFeedback || saved?.aiMessage)
     };
     document.dispatchEvent(new CustomEvent('mobile-coach-avatar', {
-      detail: { type, response: metadata, animate: type === 'response' && (screen === 'home' || screen === coachType) }
+      detail: {
+        type,
+        response: metadata,
+        animate: typeof animateOverride === 'boolean'
+          ? animateOverride
+          : type === 'response' && (screen === 'home' || screen === coachType)
+      }
     }));
   } catch (_) { /* Avatar must never affect save/load/text rendering. */ }
 }
@@ -499,7 +817,7 @@ function setRadio(name, value) {
   if (input) input.checked = true;
 }
 
-function showResponse(id, text) {
+function showFormStatus(id, text) {
   const element = $(id);
   element.textContent = text || '';
   element.classList.toggle('hidden', !text);

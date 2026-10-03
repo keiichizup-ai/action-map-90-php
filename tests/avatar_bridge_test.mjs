@@ -195,6 +195,29 @@ test('Presentation controller uses safe DOM/copy and falls back to neutral then 
   mira.suspend(); assert.equal(mira.lifecycle, 'SUSPENDED'); mira.resume();
   await assert.rejects(mira.init(host)); mira.dispose(); mira.dispose(); assert.equal(host.children.length, 0);
 });
+test('Presentation voice controls expose record, replay, stop, transcript and isolated errors', async () => {
+  const host = new Element(new Document()); const mira = new MiraPresentationController(); await mira.init(host);
+  const actions = [];
+  for (const type of ['mobile-coach-voice-toggle', 'mobile-coach-voice-replay', 'mobile-coach-voice-stop']) {
+    host.addEventListener(type, () => actions.push(type));
+  }
+  mira.voiceRecord.dispatchEvent(new Event('click'));
+  mira.setVoiceStatus({ state: 'RECORDING' });
+  assert.equal(mira.voiceRecord.textContent, '⏹ 録音を停止');
+  mira.voiceRecord.dispatchEvent(new Event('click'));
+  mira.setVoiceStatus({ state: 'IDLE', canReplay: true, transcript: '明日は最初のタスクを進めます。' });
+  assert.equal(mira.followupInput.value, '明日は最初のタスクを進めます。');
+  assert.equal(mira.voiceControls.hidden, false);
+  mira.voiceReplay.dispatchEvent(new Event('click')); mira.voiceStop.dispatchEvent(new Event('click'));
+  assert.deepEqual(actions, ['mobile-coach-voice-toggle', 'mobile-coach-voice-toggle', 'mobile-coach-voice-replay', 'mobile-coach-voice-stop']);
+  mira.setVoiceStatus({ state: 'SPEAKING', error: '' });
+  assert.equal(mira.voiceStop.disabled, false); assert.equal(mira.voiceReplay.disabled, true);
+  mira.setVoiceStatus({ state: 'IDLE', error: '音声だけ失敗しました。', canReplay: true });
+  assert.equal(mira.voiceError.textContent, '音声だけ失敗しました。');
+  mira.setFollowupStatus({ busy: true }); assert.equal(mira.voiceRecord.disabled, true);
+  mira.setFollowupStatus({ busy: false }); assert.equal(mira.voiceRecord.disabled, false);
+  mira.dispose();
+});
 test('Mobile adapter focus/save/visibility/BFCache no replay; disable hides', async () => {
   const f = await fixture(); const adapter = bindMobileAvatar(f);
   const notify = (type, response = null, animate = false) => emit(f.document, 'mobile-coach-avatar', { detail: { type, response, animate } });
@@ -222,6 +245,34 @@ test('Mobile adapter restores pre-follow-up bubble, state and expression after f
   f.bridge.setState('THINKING'); notify('followup-restore');
   assert.equal(f.bridge.state, 'IDLE'); assert.equal(f.bridge.expression, 'encourage');
   assert.equal(f.controller.message, '前の有効な回答');
+  adapter.dispose();
+});
+test('Mobile adapter maps recording/transcribing/speech without replaying Coach animations', async () => {
+  const f = await fixture(); const adapter = bindMobileAvatar(f);
+  const notify = type => emit(f.document, 'mobile-coach-avatar', { detail: { type } });
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'enable' } });
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'restore', response: { question_type: 'START_SMALL', display_text: '前の回答' } } });
+  notify('voice-recording'); assert.equal(f.bridge.state, 'LISTENING');
+  notify('voice-transcribing'); assert.equal(f.bridge.state, 'THINKING');
+  notify('voice-idle'); assert.equal(f.bridge.state, 'IDLE'); assert.equal(f.bridge.expression, 'encourage');
+  notify('speech-start'); assert.equal(f.bridge.state, 'SPEAKING'); assert.equal(f.bridge.expression, 'encourage');
+  notify('speech-end'); assert.equal(f.bridge.state, 'IDLE'); assert.equal(f.bridge.expression, 'encourage');
+  assert.equal(f.clock.timers.size, 0);
+  adapter.dispose();
+});
+test('follow-up text exits THINKING before audio and SPEAKING belongs only to playback', async () => {
+  const f = await fixture(); const adapter = bindMobileAvatar(f);
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'enable' } });
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'followup-start' } });
+  assert.equal(f.bridge.state, 'THINKING');
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'response', animate: false,
+    response: { question_type: 'START_SMALL', display_text: 'まず10分だけ始めましょう。' } } });
+  assert.equal(f.bridge.state, 'IDLE'); assert.equal(f.bridge.expression, 'encourage');
+  assert.equal(f.controller.message, 'まず10分だけ始めましょう。'); assert.equal(f.clock.timers.size, 0);
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'speech-start' } });
+  assert.equal(f.bridge.state, 'SPEAKING');
+  emit(f.document, 'mobile-coach-avatar', { detail: { type: 'speech-end' } });
+  assert.equal(f.bridge.state, 'IDLE'); assert.equal(f.controller.message, 'まず10分だけ始めましょう。');
   adapter.dispose();
 });
 test('adapter isolates a deliberately throwing bridge from notifications', () => {

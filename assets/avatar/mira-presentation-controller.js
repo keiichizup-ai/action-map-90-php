@@ -16,6 +16,14 @@ const STATE_LABELS = Object.freeze({
   SPEAKING: 'コーチング中',
   ENCOURAGING: '応援しています'
 });
+const VOICE_STATES = ['IDLE', 'RECORDING', 'TRANSCRIBING', 'THINKING', 'SPEAKING'];
+const VOICE_LABELS = Object.freeze({
+  IDLE: '',
+  RECORDING: '録音中です。もう一度押すと停止します。',
+  TRANSCRIBING: '音声を文字にしています…',
+  THINKING: 'Miraが回答を考えています…',
+  SPEAKING: 'Miraの音声を再生しています。'
+});
 
 function imageUrls() {
   const moduleUrl = new URL(import.meta.url);
@@ -91,11 +99,34 @@ export class MiraPresentationController {
     this.followupSend.type = 'submit';
     this.followupSend.className = 'mira-followup-send';
     this.followupSend.textContent = '送信';
+    this.voiceRecord = document.createElement('button');
+    this.voiceRecord.type = 'button';
+    this.voiceRecord.className = 'mira-voice-record';
+    this.voiceRecord.textContent = '🎤 Miraに話す';
+    this.voiceRecord.setAttribute('aria-pressed', 'false');
     this.followupError = document.createElement('p');
     this.followupError.className = 'mira-followup-error';
     this.followupError.setAttribute('role', 'alert');
-    this.followupForm.append(this.followupLabel, this.followupInput, this.followupSend, this.followupError);
-    this.followupPanel.append(this.followupForm);
+    this.followupForm.append(this.followupLabel, this.followupInput, this.voiceRecord, this.followupSend, this.followupError);
+    this.voiceControls = document.createElement('div');
+    this.voiceControls.className = 'mira-voice-controls';
+    this.voiceReplay = document.createElement('button');
+    this.voiceReplay.type = 'button';
+    this.voiceReplay.className = 'mira-voice-replay';
+    this.voiceReplay.textContent = '🔊 もう一度聞く';
+    this.voiceStop = document.createElement('button');
+    this.voiceStop.type = 'button';
+    this.voiceStop.className = 'mira-voice-stop';
+    this.voiceStop.textContent = '⏹ 停止';
+    this.voiceControls.append(this.voiceReplay, this.voiceStop);
+    this.voiceControls.hidden = true;
+    this.voiceStatus = document.createElement('p');
+    this.voiceStatus.className = 'mira-voice-status';
+    this.voiceStatus.setAttribute('aria-live', 'polite');
+    this.voiceError = document.createElement('p');
+    this.voiceError.className = 'mira-voice-error';
+    this.voiceError.setAttribute('role', 'alert');
+    this.followupPanel.append(this.followupForm, this.voiceControls, this.voiceStatus, this.voiceError);
     host.append(this.card, this.followupPanel);
 
     this.onFollowupToggle = () => {
@@ -121,9 +152,18 @@ export class MiraPresentationController {
         this.followupForm.requestSubmit();
       }
     };
+    this.onVoiceRecord = () => {
+      if (this.voiceRecord.disabled) return;
+      host.dispatchEvent(new CustomEvent('mobile-coach-voice-toggle', { bubbles: true }));
+    };
+    this.onVoiceReplay = () => host.dispatchEvent(new CustomEvent('mobile-coach-voice-replay', { bubbles: true }));
+    this.onVoiceStop = () => host.dispatchEvent(new CustomEvent('mobile-coach-voice-stop', { bubbles: true }));
     this.followupToggle.addEventListener('click', this.onFollowupToggle);
     this.followupForm.addEventListener('submit', this.onFollowupSubmit);
     this.followupInput.addEventListener('keydown', this.onFollowupKeydown);
+    this.voiceRecord.addEventListener('click', this.onVoiceRecord);
+    this.voiceReplay.addEventListener('click', this.onVoiceReplay);
+    this.voiceStop.addEventListener('click', this.onVoiceStop);
 
     this.urls = imageUrls();
     this.image.onload = () => this.handleImageLoad();
@@ -131,6 +171,7 @@ export class MiraPresentationController {
     this.lifecycle = 'READY';
     this.state = 'IDLE';
     this.expression = 'neutral';
+    this.voiceState = 'IDLE';
     this.renderState();
     this.renderExpression(true);
   }
@@ -209,7 +250,28 @@ export class MiraPresentationController {
     this.followupSend.disabled = this.followupBusy;
     this.followupSend.textContent = this.followupBusy ? '考えています…' : '送信';
     this.followupError.textContent = typeof error === 'string' ? error.slice(0, 120) : '';
+    if (this.voiceRecord) {
+      this.voiceRecord.disabled = this.followupBusy || ['TRANSCRIBING', 'THINKING'].includes(this.voiceState);
+    }
     if (clear) this.followupInput.value = '';
+  }
+
+  setVoiceStatus({ state = 'IDLE', error = '', canReplay = false, transcript = '' } = {}) {
+    if (!this.voiceRecord || this.disposed) return;
+    this.voiceState = VOICE_STATES.includes(state) ? state : 'IDLE';
+    const unavailable = ['TRANSCRIBING', 'THINKING'].includes(this.voiceState) || this.followupBusy;
+    this.voiceRecord.disabled = unavailable;
+    this.voiceRecord.textContent = this.voiceState === 'RECORDING' ? '⏹ 録音を停止' : '🎤 Miraに話す';
+    this.voiceRecord.setAttribute('aria-pressed', String(this.voiceState === 'RECORDING'));
+    this.voiceReplay.disabled = !canReplay || this.voiceState === 'SPEAKING';
+    this.voiceStop.disabled = this.voiceState !== 'SPEAKING';
+    this.voiceControls.hidden = !canReplay && this.voiceState !== 'SPEAKING';
+    this.voiceStatus.textContent = VOICE_LABELS[this.voiceState];
+    this.voiceError.textContent = typeof error === 'string' ? error.slice(0, 120) : '';
+    if (typeof transcript === 'string' && transcript.trim() !== '') {
+      this.followupInput.value = transcript.trim().slice(0, 500);
+      this.followupInput.focus();
+    }
   }
 
   suspend() {
@@ -234,11 +296,14 @@ export class MiraPresentationController {
     this.followupToggle?.removeEventListener('click', this.onFollowupToggle);
     this.followupForm?.removeEventListener('submit', this.onFollowupSubmit);
     this.followupInput?.removeEventListener('keydown', this.onFollowupKeydown);
+    this.voiceRecord?.removeEventListener('click', this.onVoiceRecord);
+    this.voiceReplay?.removeEventListener('click', this.onVoiceReplay);
+    this.voiceStop?.removeEventListener('click', this.onVoiceStop);
     this.card?.remove();
     this.followupPanel?.remove();
     if (this.host) hosts.delete(this.host);
     this.message = '';
-    this.card = this.visual = this.image = this.copy = this.eyebrow = this.title = this.bubble = this.status = this.dots = this.followupToggle = this.followupPanel = this.followupForm = this.followupLabel = this.followupInput = this.followupSend = this.followupError = this.host = null;
+    this.card = this.visual = this.image = this.copy = this.eyebrow = this.title = this.bubble = this.status = this.dots = this.followupToggle = this.followupPanel = this.followupForm = this.followupLabel = this.followupInput = this.followupSend = this.followupError = this.voiceRecord = this.voiceControls = this.voiceReplay = this.voiceStop = this.voiceStatus = this.voiceError = this.host = null;
   }
 }
 

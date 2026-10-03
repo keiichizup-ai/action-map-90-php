@@ -395,15 +395,6 @@ button{cursor:pointer}
 }
 .mobile-primary:disabled{opacity:.65}
 .sticky-action{position:sticky;bottom:86px;z-index:4}
-.coach-response{
-  padding:15px;
-  border-radius:16px;
-  background:#eef7ff;
-  border:1px solid #d3e9fb;
-  line-height:1.7;
-  font-size:.93rem;
-  white-space:pre-wrap
-}
 .history-list{display:grid;gap:12px}
 .history-card{
   background:#fff;

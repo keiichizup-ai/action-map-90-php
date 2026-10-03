@@ -14,6 +14,8 @@ function request(path, host = '127.0.0.1:8094') {
 test('loopback shell enables Presentation Mira and content-versioned modules, no SDK dependency', async () => {
   const response = await request('/mobile-coach.php'); assert.equal(response.status, 200);
   assert.ok(response.headers['cache-control'].includes('no-store')); assert.ok(response.body.includes('mobileMiraPresentation'));
+  assert.equal(response.body.includes('mobileConcern'), false); assert.equal(response.body.includes('mobileCheckinMessage'), false);
+  assert.equal(response.body.includes('mobileJournalMessage'), false); assert.equal(response.body.includes('AIコーチに相談する（任意）'), false);
   const urls = response.body.match(/\.\/assets\/avatar\/[^"\s]+\?v=[a-f0-9]{12}/g);
   assert.equal(urls.length, 4);
   for (const url of urls) { const asset = await request(url.slice(1)); assert.equal(asset.status, 200); }

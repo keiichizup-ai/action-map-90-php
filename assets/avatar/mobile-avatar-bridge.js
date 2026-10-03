@@ -44,11 +44,26 @@ export function bindMobileAvatar({ bridge, host, document, window }) {
       if (type === 'response') {
         followupSnapshot = null;
         saved = response;
+        // A follow-up response is first rendered at IDLE; actual audio playback
+        // alone owns the SPEAKING state. Clear the preceding THINKING state so
+        // a restore-source response is not rejected as a passive busy refresh.
+        if (!animate) bridge.setState('IDLE', { preserveExpression: true });
         bridge.applyCoachResponse(response, { source: animate ? 'new' : 'restore' });
       }
       if (type === 'followup-ui' && typeof bridge.controller?.setFollowupStatus === 'function') {
         bridge.controller.setFollowupStatus(event.detail || {});
       }
+      if (type === 'voice-ui' && typeof bridge.controller?.setVoiceStatus === 'function') {
+        bridge.controller.setVoiceStatus(event.detail || {});
+      }
+      if (type === 'voice-recording') bridge.setState('LISTENING');
+      if (type === 'voice-transcribing') bridge.setState('THINKING');
+      if (type === 'voice-idle') {
+        bridge.setState('IDLE', { preserveExpression: true });
+        bridge.applyCoachResponse(saved, { source: 'restore' });
+      }
+      if (type === 'speech-start') bridge.setState('SPEAKING', { preserveExpression: true });
+      if (type === 'speech-end') bridge.setState('IDLE', { preserveExpression: true });
     });
   }
   function onInputFocus(event) {

@@ -188,13 +188,8 @@ $presentationMiraEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
             <div id="mobileCheckinTasks" class="tap-task-list"></div>
           </fieldset>
 
-          <details class="optional-input">
-            <summary>AIコーチに相談する（任意）</summary>
-            <textarea id="mobileConcern" rows="3" placeholder="例：やる気が出ない、どれから始めるか迷う"></textarea>
-          </details>
-
           <button id="checkinSubmitBtn" class="mobile-primary sticky-action" type="submit">今日を始める</button>
-          <div id="mobileCheckinMessage" class="coach-response hidden" aria-live="polite"></div>
+          <p id="mobileCheckinStatus" class="inline-message hidden" role="alert" aria-live="assertive"></p>
         </form>
       </section>
 
@@ -238,7 +233,7 @@ $presentationMiraEnabled = dummy_avatar_enabled($_SERVER, PHP_SAPI, __DIR__);
           </details>
 
           <button id="journalSubmitBtn" class="mobile-primary sticky-action" type="submit">AIコーチに報告する</button>
-          <div id="mobileJournalMessage" class="coach-response hidden" aria-live="polite"></div>
+          <p id="mobileJournalStatus" class="inline-message hidden" role="alert" aria-live="assertive"></p>
         </form>
       </section>
 

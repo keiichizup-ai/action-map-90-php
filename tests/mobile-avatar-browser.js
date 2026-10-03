@@ -64,12 +64,13 @@ button.addEventListener('click', async () => {
     await waitForImage('neutral');
     assert(getComputedStyle(image()).objectFit === 'contain', 'Neutral asset loaded with aspect-ratio-preserving fit');
     const expressionHeights = [card().getBoundingClientRect().height];
-    assert(output().includes('State: IDLE') && !doc.getElementById('mobileCheckinMessage').textContent, 'fresh document: IDLE, no stale response');
+    assert(output().includes('State: IDLE'), 'fresh document: IDLE');
+    assert(!doc.getElementById('mobileConcern') && !doc.getElementById('mobileCheckinMessage')
+      && !doc.getElementById('mobileJournalMessage') && !doc.body.textContent.includes('AIコーチに相談する（任意）'),
+    'lower optional Coach input and duplicate response boxes are absent');
     doc.querySelector('[data-mobile-screen="morning"]').click();
-    doc.querySelector('#mobileCheckinForm details').open = true;
-    const concern = doc.getElementById('mobileConcern'); concern.focus();
+    const moodInput = doc.querySelector('[name="mobileCheckinMood"][value="3"]'); moodInput.focus();
     assert(output().includes('LISTENING'), 'input focus => LISTENING');
-    concern.value = 'Fixture concern';
     doc.getElementById('mobileCheckinForm').requestSubmit();
     assert(output().includes('THINKING'), 'Morning send => THINKING');
     await waitFor(() => events.some(event => event.type === 'response'));
@@ -100,6 +101,8 @@ button.addEventListener('click', async () => {
     await waitFor(() => events.filter(event => event.type === 'response').length > beforeFollowup);
     await waitFor(() => card().querySelector('.mira-presentation-bubble').textContent.includes('全部を終えなくても'));
     assert(!doc.querySelector('.mira-followup-send').disabled && followupInput.value === '', 'follow-up reply restores form and clears submitted input');
+    await waitFor(() => !doc.querySelector('.mira-voice-controls').hidden);
+    assert(doc.querySelector('.mira-voice-replay') && doc.querySelector('.mira-voice-stop'), 'successful reply exposes replay and stop controls');
     await waitFor(() => output().includes('State: IDLE') && output().includes('Expr: encourage'));
     const encourageText = card().querySelector('.mira-presentation-bubble').textContent;
     followupInput.value = 'FIXTURE_FAIL';
@@ -125,7 +128,7 @@ button.addEventListener('click', async () => {
     doc.querySelector('[data-mobile-screen="history"]').click();
     assert(doc.getElementById('mobileHistory').textContent.includes('2件中1件'), 'History retains Text Coach');
     assert(output().includes('State: IDLE') && output().includes('SUSPENDED'), 'History suspends Avatar animation');
-    assert(!JSON.stringify(events).includes('Fixture concern') && events.every(event => !('coach_message' in (event.response || {}))), 'Avatar metadata excludes text and identity');
+    assert(events.every(event => !('concern' in (event.response || {})) && !('coach_message' in (event.response || {}))), 'Avatar metadata excludes concern and private response fields');
     for (const [label, response, expression] of [
       ['OBSTACLE', { question_type: 'OBSTACLE' }, 'empathy'],
       ['REPEATED_POSTPONEMENT', { question_type: 'NEXT_STEP', behavior_signals: ['REPEATED_POSTPONEMENT'] }, 'empathy'],
@@ -168,11 +171,11 @@ button.addEventListener('click', async () => {
     adapter = bindMobileAvatar({ bridge, host, document: doc, window: win }); notify('enable');
     assert(!await bridge.init(host) && doc.querySelectorAll('.mira-presentation-card').length === 1, 'double init cannot duplicate Mira DOM');
     const originalEmpathyUrl = bridge.controller.urls.empathy;
-    const textBeforeMissingImage = doc.getElementById('mobileCheckinMessage').textContent;
+    const textBeforeMissingImage = doc.getElementById('homeCoachMessage').textContent;
     bridge.controller.urls.empathy = new URL('/assets/avatar/mira/missing-empathy.webp', doc.baseURI).href;
     notify('restore', { question_type: 'OBSTACLE' });
     await waitFor(() => imageName() === 'mira-neutral.webp' && card().dataset.imageStatus === 'fallback');
-    assert(doc.getElementById('mobileCheckinMessage').textContent === textBeforeMissingImage && !host.hidden,
+    assert(doc.getElementById('homeCoachMessage').textContent === textBeforeMissingImage && !host.hidden,
       'missing non-neutral image falls back to neutral; Text Coach unaffected');
     bridge.controller.urls.empathy = originalEmpathyUrl;
     fail = true;
@@ -181,7 +184,7 @@ button.addEventListener('click', async () => {
     doc.getElementById('mobileCheckinForm').requestSubmit();
     await waitFor(() => events.filter(event => event.type === 'response').length > beforeFailure);
     await win.__dummyProbe.whenIdle();
-    assert(bridge.lifecycle === 'FAILED' && host.hidden && doc.getElementById('mobileCheckinMessage').textContent.includes('Fixture:')
+    assert(bridge.lifecycle === 'FAILED' && host.hidden && doc.getElementById('homeCoachMessage').textContent.includes('Fixture:')
       && !doc.getElementById('checkinSubmitBtn').disabled, 'Controller failure: Text Coach/save continues');
     adapter.dispose(); adapter = null;
     assert(doc.querySelectorAll('.mira-presentation-card').length === 0 && bridge.timers.size === 0, 'failure disposal releases DOM and timers');
